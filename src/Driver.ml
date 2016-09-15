@@ -6,6 +6,7 @@ read (y);
 z := x * x;
 write (z+y)
 *)
+
 let p =
   Seq (
       Read "x",
@@ -18,9 +19,11 @@ let p =
       )
     )
 
-let _ =
+(*
+  let _ =
   let [r] = run [3; 4] p in
   Printf.printf "%d\n" r
+*)
 
 let ( !! )       = (!)
 let ( !  ) x     = Var x
@@ -39,13 +42,15 @@ read (x);
 read (y);
 z := x * x;
 write (z+y)
-*)
+
 
 let p =
   read "x" |>
   read "y" |>
   ("z" := !"x" * !"x") |>
-  write (!"z" + !"y")  
+  write (!"z" + !"y")  |>
+  read "z" |>
+  write (!"z")
 
 let _ =
   let [r] = run [3; 4] p in
@@ -57,3 +62,19 @@ let run input p =
 let _ =
   let [r] = run [3; 4] p in
   Printf.printf "%d\n" r
+*)
+
+let run' code = Printf.printf "%s" (x86toStr (x86compile (compile_stmt code)))
+
+(*
+let _ = 
+    let p =
+      read "x" |>
+      read "y" |>
+      ("z" := !"x" * !"x") |>
+      write (!"z")  
+    in
+    run' p
+*)
+
+let _ = run' p
