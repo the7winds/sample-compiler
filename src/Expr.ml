@@ -96,7 +96,7 @@ type opnd = R of int | S of int | M of string | L of int
 
 let allocate stack =
   match stack with
-  | []                              -> R 0
+  | []                              -> R 2
   | (S n)::_                        -> S (n+1)
   | (R n)::_ when n < num_of_regs-1 -> R (n+1)
   | _                               -> S 0
@@ -110,19 +110,97 @@ type x86instr =
   | X86Ret
   | X86Call of string
 
-let x86compile : instr list -> x86instr list = fun code ->
+let x86compile code =
   let rec x86compile' stack code =
     match code with
     | []       -> []
     | i::code' ->
        let (stack', x86code) =
          match i with
-         | S_READ   -> ([R 0], [X86Call "read"])
+         | S_READ   -> ([R 2], [X86Call "read";
+                                X86Mov (R 0, R 2)])
          | S_PUSH n ->
             let s = allocate stack in
-            (s::stack, [X86Mov (L n, s)])
+            (s::stack, [X86Push (L n)])
+         | S_WRITE  -> ([], [X86Push (R 2);
+                             X86Call "write";
+                             X86Pop  (R 2)])
+         | S_ST x   -> (
+            let a::stack'' = stack in
+            match a with
+            | S _ -> (stack'', [X86Pop (R 0);
+                                X86Mov (R 0, M x)])
+            | R t -> (stack'', [X86Mov (R t, M x)]))
+         | S_LD x   -> (
+            let a = allocate stack in
+            match a with
+            | S _ -> (a::stack, [X86Push (M x)])
+            | R t -> (a::stack, [X86Mov  (M x, R t)]))
+         | S_ADD    -> (
+            let a::b::stack'' = stack in
+              match a with
+              | R x -> (b::stack'', [X86Add (a, b)])
+              | S x ->
+                match b with
+                | R y -> (b::stack'', [X86Add (a, b)])
+                | S y -> (b::stack'', [X86Pop (R 0);
+                                       X86Pop (R 1);
+                                       X86Add (R 1, R 0);
+                                       X86Push (R 0)]))
+         | S_MUL    -> 
+            let a::b::stack'' = stack in
+              match a with
+              | R x -> (b::stack'', [X86Mul (a, b)])
+              | S x ->
+                match b with
+                | R y -> (b::stack'', [X86Mul (a, b)])
+                | S y -> (b::stack'', [X86Pop (R 0);
+                                       X86Pop (R 1);
+                                       X86Mul (R 1, R 0);
+                                       X86Push (R 0)])
        in
-       x86code @ x86compile' stack' code'
+       x86code @ (x86compile' stack' code')
   in
-  x86compile' [] code
-                                         
+  (x86compile' [] code) @ [X86Ret]
+
+let x86toStr code =
+    let printOp op =
+      match op with
+      | R n -> x86regs.(n)
+      | M x -> x
+      | L n -> String.concat "" ["$"; Pervasives.string_of_int n]
+    in
+    let printCmd cmd =
+      match cmd with
+      | X86Add  (a, b) -> String.concat " " ["add";  printOp a; ","; printOp b]
+      | X86Mul  (a, b) -> String.concat " " ["imul"; printOp a; ","; printOp b]
+      | X86Mov  (a, b) -> String.concat " " ["mov";  printOp a; ","; printOp b]
+      | X86Push a      -> String.concat " " ["push"; printOp a]
+      | X86Pop  a      -> String.concat " " ["pop";  printOp a]
+      | X86Call s      -> String.concat " " ["call"; s]
+      | X86Ret         -> "ret"
+    in
+    let getVars code =
+      let toOp c =
+        match c with
+        | X86Add (a, b) -> [a; b]
+        | X86Mul (a, b) -> [a; b]
+        | X86Push a     -> [a]
+        | X86Pop  a     -> [a]
+        | X86Mov (a, b) -> [a; b]
+        | _             -> []
+      in
+      let pr o =
+        match o with
+        | M x -> true
+        | _   -> false
+      in
+      let toS (M s) = s
+      in
+      List.sort_uniq compare (List.map toS (List.filter pr (List.concat (List.map toOp code))))
+    in
+    let toVar v = String.concat " " [".comm"; v; "4"]
+    in
+    let vars : string list = getVars code
+    in
+    String.concat "\n" ([".text"] @ (List.map toVar vars) @ [".global main"; "main:"] @ (List.map printCmd code))
