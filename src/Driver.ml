@@ -17,7 +17,7 @@ let p =
               Seq (
                  Write (Var "z"),
                  Seq (
-                    Assign ("z", Mod (Var "x", Var "y")),
+                    Assign ("z", And (Grtr (Var "x", Var "y"), Eq (Var "y", Const 42))),
                     Write (Var "z")
                  )
               )
