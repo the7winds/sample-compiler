@@ -13,8 +13,14 @@ let p =
       Seq (
           Read "y",
           Seq (
-              Assign ("z", Mul (Var "x", Var "x")),
-              Write (Add (Var "z", Var "y"))
+              Assign ("z", Div (Var "x", Var "y")),
+              Seq (
+                 Write (Var "z"),
+                 Seq (
+                    Assign ("z", Mod (Var "x", Var "y")),
+                    Write (Var "z")
+                 )
+              )
           )
       )
     )
@@ -30,6 +36,8 @@ let ( !  ) x     = Var x
 let ( $  ) n     = Const n
 let ( +  ) e1 e2 = Add (e1, e2)
 let ( *  ) e1 e2 = Mul (e1, e2)
+let ( /  ) e1 e2 = Div (e1, e2)
+let ( %  ) e1 e2 = Mod (e1, e2)
 
 let skip     = Skip
 let (:=) x e = Assign (x, e)
