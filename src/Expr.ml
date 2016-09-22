@@ -1,36 +1,44 @@
+type op = 
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Mod
+  | Gt
+  | Gq
+  | Lt
+  | Lq
+  | Eq
+  | Nq
+  | And
+  | Or
+
 type expr =
   | Const of int
   | Var   of string
-  | Add   of expr * expr
-  | Sub   of expr * expr
-  | Mul   of expr * expr
-  | Div   of expr * expr
-  | Mod   of expr * expr 
-  | And   of expr * expr
-  | Or    of expr * expr
-  | Eq    of expr * expr
-  | NEq   of expr * expr
-  | Less  of expr * expr
-  | Leq   of expr * expr
-  | Grtr  of expr * expr
-  | Geq   of expr * expr
+  | BinOp of op * expr * expr
 
 let rec eval state expr =
   match expr with
   | Const  n     -> n
   | Var    x     -> state x
-  | Add   (l, r) -> eval state l + eval state r
-  | Mul   (l, r) -> eval state l * eval state r
-  | Div   (l, r) -> eval state l / eval state r
-  | Mod   (l, r) -> eval state l mod eval state r
-  | And   (l, r) -> if (eval state l) *  (eval state r) > 0 then 1 else 0
-  | Or    (l, r) -> if (eval state l) +  (eval state l) > 0 then 1 else 0
-  | Eq    (l, r) -> if (eval state l) == (eval state r) then 1 else 0
-  | NEq   (l, r) -> if (eval state l) != (eval state r) then 1 else 0
-  | Less  (l, r) -> if (eval state l) <  (eval state r) then 1 else 0
-  | Leq   (l, r) -> if (eval state l) <= (eval state r) then 1 else 0
-  | Grtr  (l, r) -> if (eval state l) >  (eval state r) then 1 else 0
-  | Geq   (l, r) -> if (eval state l) >= (eval state r) then 1 else 0
+  | BinOp (o, l, r) -> 
+    let lv = eval state l in
+    let rv = eval state r in
+    match o with
+    | Add -> lv + rv
+    | Sub -> lv - rv
+    | Mul -> lv * rv
+    | Div -> lv / rv
+    | Mod -> lv mod rv
+    | And -> if lv != 0 && rv != 0 then 1 else 0
+    | Or  -> if lv != 0 || rv != 0 then 1 else 0
+    | Eq  -> if lv == rv then 1 else 0
+    | Nq  -> if lv != rv then 1 else 0
+    | Gq  -> if lv >= rv then 1 else 0
+    | Lq  -> if lv <= rv then 1 else 0
+    | Gt  -> if lv > rv then 1 else 0
+    | Lt  -> if lv < rv then 1 else 0
 
 type stmt =
   | Skip
@@ -68,7 +76,7 @@ type instr =
   | S_AND
   | S_OR
   | S_EQ
-  | S_NEQ
+  | S_NQ
   | S_LT
   | S_LQ
   | S_GT
@@ -118,7 +126,7 @@ let srun input code =
           | S_EQ  ->
              let y::x::stack' = stack in
              (state, (if x == y then 1 else 0)::stack', input, output)
-          | S_NEQ ->
+          | S_NQ ->
              let y::x::stack' = stack in
              (state, (if x != y then 1 else 0)::stack', input, output)
           | S_GQ  ->
@@ -140,21 +148,25 @@ let srun input code =
 
 let rec compile_expr expr =
   match expr with
-  | Var    x     -> [S_LD   x]
-  | Const  n     -> [S_PUSH n]
-  | Add   (l, r) -> compile_expr l @ compile_expr r @ [S_ADD]
-  | Sub   (l, r) -> compile_expr l @ compile_expr r @ [S_SUB]
-  | Mul   (l, r) -> compile_expr l @ compile_expr r @ [S_MUL]
-  | Div   (l, r) -> compile_expr l @ compile_expr r @ [S_DIV]
-  | Mod   (l, r) -> compile_expr l @ compile_expr r @ [S_MOD]
-  | And   (l, r) -> compile_expr l @ compile_expr r @ [S_AND]
-  | Or    (l, r) -> compile_expr l @ compile_expr r @ [S_OR]
-  | Eq    (l, r) -> compile_expr l @ compile_expr r @ [S_EQ]
-  | NEq   (l, r) -> compile_expr l @ compile_expr r @ [S_NEQ]
-  | Less  (l, r) -> compile_expr l @ compile_expr r @ [S_LT]
-  | Grtr  (l, r) -> compile_expr l @ compile_expr r @ [S_GT]
-  | Leq   (l, r) -> compile_expr l @ compile_expr r @ [S_LQ]
-  | Geq   (l, r) -> compile_expr l @ compile_expr r @ [S_GQ]
+  | Var    x         -> [S_LD   x]
+  | Const  n         -> [S_PUSH n]
+  | BinOp  (o, l, r) ->
+    let lc = compile_expr l in
+    let rc = compile_expr r in
+    match o with
+    | Add -> lc @ rc @ [S_ADD]
+    | Sub -> lc @ rc @ [S_SUB]
+    | Mul -> lc @ rc @ [S_MUL]
+    | Div -> lc @ rc @ [S_DIV]
+    | Mod -> lc @ rc @ [S_MOD]
+    | And -> lc @ rc @ [S_AND]
+    | Or  -> lc @ rc @ [S_OR]
+    | Eq  -> lc @ rc @ [S_EQ]
+    | Nq  -> lc @ rc @ [S_NQ]
+    | Lt  -> lc @ rc @ [S_LT]
+    | Gt  -> lc @ rc @ [S_GT]
+    | Lq  -> lc @ rc @ [S_LQ]
+    | Gq  -> lc @ rc @ [S_GQ]
   
 
 let rec compile_stmt stmt =
@@ -169,7 +181,13 @@ let x86regs = [|"%eax"; "%edx"; "%ebx"; "%ecx"; "%esi"; "%edi"|]
 let num_of_regs = Array.length x86regs
 let word_size = 4
 
-type opnd = R of int | S of int | M of string | L of int | MK of int
+type opnd = 
+  | R  of int        (* for register mem *)
+  | S  of int        (* for stack mem    *)
+  | M  of string     (* for static vars  *)
+  | L  of int        (* for immidiate    *)
+  | MK of string     (* for marks        *)
+  | F  of string     (* for functions    *)
 
 let allocate stack =
   match stack with
@@ -179,29 +197,34 @@ let allocate stack =
   | _                               -> S 0
 
 type x86instr =
-  | X86Add  of opnd * opnd
-  | X86Sub  of opnd * opnd
-  | X86Mul  of opnd * opnd
-  | X86Mov  of opnd * opnd
-  | X86Cmp  of opnd * opnd
-  | X86And  of opnd * opnd
-  | X86Or   of opnd * opnd
-  | X86Div  of opnd
-  | X86Push of opnd
-  | X86Pop  of opnd
-  | X86Mark of opnd
-  | X86Jz   of opnd
-  | X86Jnz  of opnd
-  | X86Je   of opnd
-  | X86Jg   of opnd
-  | X86Jge  of opnd
-  | X86Jl   of opnd
-  | X86Jle  of opnd
-  | X86Jne  of opnd
-  | X86Jmp  of opnd
-  | X86Call of string
+  | X86Add  
+  | X86Sub  
+  | X86Mul  
+  | X86Mov  
+  | X86Cmp  
+  | X86And  
+  | X86Or   
+  | X86Div  
+  | X86Push 
+  | X86Pop  
+  | X86Jz   
+  | X86Jnz  
+  | X86Je   
+  | X86Jg   
+  | X86Jge  
+  | X86Jl   
+  | X86Jle  
+  | X86Jne  
+  | X86Jmp  
+  | X86Call 
   | X86Cltd
   | X86Ret
+
+type x86stmt =
+  | X86Mark     of opnd
+  | X860RInstr  of x86instr
+  | X86UnInstr  of x86instr * opnd
+  | X86BinInstr of x86instr * opnd * opnd
 
 let x86compile code =
   let rec x86compile' mark stack code =
@@ -209,368 +232,168 @@ let x86compile code =
     | []       -> []
     | i::code' ->
        let (mark', stack', x86code) =
+         let getSimpleArithmCode op l r res = [
+            X86BinInstr (X86Mov, l, R 0);
+            X86BinInstr (X86Mov, r, R 1);
+            X86BinInstr (op, R 0, R 1);
+            X86BinInstr (X86Mov, R 1, res)]
+         in
+         let getDivisionCode l r = [
+            X86BinInstr (X86Mov, l, R 0);
+            X86BinInstr (X86Mov, r, R 2);
+            X860RInstr  (X86Cltd);
+            X86UnInstr  (X86Div, R 2)]
+         in
+         let getLogicOpCode op l r res mark = 
+           let m1 = MK Printf.sprintf "MK%d" (mark + 1) in
+           let m2 = MK Printf.sprintf "MK%d" (mark + 2) in
+             (mark + 2, [X86BinInstr (X86Mov, l, R 0);
+                         X86BinInstr (X86Mov, r, R 1);
+                         X86BinInstr (op, R 0, R 1);
+                         X86UnInstr  (X86Jz, m1);
+                         X86BinInstr (X86Mov, L 1, R 2);
+                         X86UnInstr  (X86Jmp, m2);
+                         X86Mark     m1;
+                         X86BinInstr (X86Mov, L 0, R 2);
+                         X86Mark     m2;
+                         X86BinInstr (X86Mov, R 2, res)])
+         in
+         let getCmpOpCode op l r res mark =
+           let m1 = MK Printf.sprintf "MK%d" (mark + 1) in
+           let m2 = MK Printf.sprintf "MK%d" (mark + 2) in
+             (mark + 2, [X86BinInstr (X86Mov, l, R 0);
+                         X86BinInstr (X86Mov, r, R 1);
+                         X86BinInstr (X86Cmp, R 1, R 0);
+                         X86UnInstr  (op, m1);
+                         X86BinInstr (X86Mov, L 0, R 2);
+                         X86UnInstr  (X86Jmp, m2);
+                         X86Mark     m1;
+                         X86BinInstr (X86Mov, L 1, R 2);
+                         X86Mark     m2;
+                         X86BinInstr (X86Mov, R 2, res)])
+         in
          match i with
-         | S_READ   -> (mark, [R 3], [X86Call "read";
-                                      X86Mov  (R 0, R 3)])
-         | S_PUSH n -> (
+         | S_READ   -> (mark, [R 3], [X86UnInstr (X86Call, F "read");
+                                      X86BinInstr (X86Mov, R 0, R 3)])
+         | S_PUSH n ->
             let s = allocate stack in
-            match s with
-            | R _ -> (mark, s::stack, [X86Mov (L n, s)])
-            | S _ -> (mark, s::stack, [X86Push (L n)]))
-         | S_WRITE  -> (mark, [], [X86Push    (R 3);
-                                   X86Call    "write";
-                                   X86Pop     (R 3)])
-         | S_ST x   -> 
-            let (s', c') = (
+            (mark, s::stack, [X86BinInstr (X86Mov, L n, s)])
+         | S_WRITE  -> (mark, [], [X86UnInstr (X86Push, R 3);
+                                   X86UnInstr (X86Call, F "write");
+                                   X86UnInstr (X86Pop, R 3)])
+         | S_ST x   ->
             let a::stack' = stack in
-            match a with
-            | S _ -> (stack', [X86Pop (R 0);
-                               X86Mov (R 0, M x)])
-            | R t -> (stack', [X86Mov (R t, M x)]))
-            in (mark, s', c')
-         | S_LD x   -> 
-            let (s', c') = (
+            (mark, stack',  [X86BinInstr (X86Mov, a, R 0);
+                             X86BinInstr (X86Mov, R 0, M x)])
+         | S_LD x   ->
             let a = allocate stack in
-            match a with
-            | S _ -> (a::stack, [X86Push (M x)])
-            | R t -> (a::stack, [X86Mov  (M x, R t)]))
-            in (mark, s', c')
-         | S_ADD    -> 
-            let (s', c') = (
-            let a::b::stack' = stack in
-              match a with
-              | R x -> (b::stack', [X86Add (a, b)])
-              | S x ->
-                match b with
-                | R y -> (b::stack', [X86Add (a, b)])
-                | S y -> (b::stack', [X86Pop    (R 0);
-                                      X86Pop    (R 1);
-                                      X86Add    (R 1, R 0);
-                                      X86Push   (R 0)]))
-            in (mark, s', c')
+            (mark, a::stack, [X86BinInstr (X86Mov, M x, R 0);
+                              X86BinInstr (X86Mov, R 0, a)])
+         | S_ADD    ->
+            let r::l::stack' = stack in
+            (mark, l::stack', getSimpleArithmCode X86Add l r l)
          | S_SUB    -> 
-            let (s', c') = (
-            let a::b::stack' = stack in
-              match a with
-              | R x -> (b::stack', [X86Sub (a, b)])
-              | S x ->
-                match b with
-                | R y -> (b::stack', [X86Sub (a, b)])
-                | S y -> (b::stack', [X86Pop    (R 0);
-                                      X86Pop    (R 1);
-                                      X86Sub    (R 1, R 0);
-                                      X86Push   (R 0)]))
-            in (mark, s', c')
+            let r::l::stack' = stack in
+            (mark, l::stack', getSimpleArithmCode X86Sub l r l)
          | S_MUL    -> 
-            let (s', c') = ( 
-            let a::b::stack' = stack in
-              match b with
-              | R x -> (b::stack', [X86Mul (a, b)])
-              | S x ->
-                match a with
-                | R y -> (b::stack', [X86Mul (a, b)])
-                | S y -> (b::stack', [X86Pop    (R 0);
-                                      X86Pop    (R 1);
-                                      X86Mul    (R 1, R 0);
-                                      X86Push   (R 0)]))
-             in (mark, s', c')
+            let r::l::stack' = stack in
+            (mark, l::stack', getSimpleArithmCode X86Mul l r l)
          | S_DIV    -> 
-            let (s', c') = (
-            let a::b::stack' = stack in
-              match b with
-              | R x -> (b::stack', [X86Mov  (b, R 0);
-                                    X86Cltd;
-                                    X86Div  (a);
-                                    X86Mov  (R 0, b)])
-              | S x ->
-                match a with
-                | R y -> (b::stack', [X86Pop    (R 0);
-                                      X86Cltd;
-                                      X86Div    (a);
-                                      X86Push   (R 0)])
-                | S y -> (b::stack', [X86Pop    (R 2);
-                                      X86Pop    (R 0);
-                                      X86Cltd;
-                                      X86Div    (R 2);
-                                      X86Push   (R 0)]))
-            in (mark, s', c')
+            let r::l::stack' = stack in
+            (mark, l::stack', getDivisionCode l r @ [X86BinInstr (X86Mov, R 0, l)])
          | S_MOD    -> 
-            let (s', c') = (
-            let a::b::stack' = stack in
-              match b with
-              | R x -> (b::stack', [X86Mov  (b, R 0);
-                                    X86Cltd;
-                                    X86Div  (a);
-                                    X86Mov  (R 1, b)])
-              | S x ->
-                match a with
-                | R y -> (b::stack', [X86Pop    (R 0);
-                                      X86Cltd;
-                                      X86Div    (a);
-                                      X86Push   (R 1)])
-                | S y -> (b::stack', [X86Pop    (R 2);
-                                      X86Pop    (R 0);
-                                      X86Cltd;
-                                      X86Div    (R 2);
-                                      X86Push   (R 1)]))
-            in (mark, s', c')
-         | S_AND     -> (
-            let a::b::stack' = stack in
-              match b with
-              | R x -> (mark + 2, b::stack', [X86And    (a, b);
-                                              X86Jz     (MK (mark + 1));
-                                              X86Mov    (L 1, b);
-                                              X86Jmp    (MK (mark + 2));
-                                              X86Mark   (MK (mark + 1));
-                                              X86Mov    (L 0, b);
-                                              X86Mark   (MK (mark + 2))])
-              | S x ->
-                match a with
-                | R y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86And    (R 0, b);
-                                                X86Jz     (MK (mark + 1));
-                                                X86Mov    (L 1, b);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 0, b);
-                                                X86Mark   (MK (mark + 2))])
-                | S y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Pop    (R 1);
-                                                X86And    (R 0, R 1);
-                                                X86Jz     (MK (mark + 1));
-                                                X86Mov    (L 1, R 1);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 0, R 1);
-                                                X86Mark   (MK (mark + 2));
-                                                X86Push   (R 1)]))
-         | S_OR      -> (
-            let a::b::stack' = stack in
-              match b with
-              | R x -> (mark + 2, b::stack', [X86Or     (a, b);
-                                              X86Jz     (MK (mark + 1));
-                                              X86Mov    (L 1, b);
-                                              X86Jmp    (MK (mark + 2));
-                                              X86Mark   (MK (mark + 1));
-                                              X86Mov    (L 0, b);
-                                              X86Mark   (MK (mark + 2))])
-              | S x ->
-                match a with
-                | R y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Or     (R 0, b);
-                                                X86Jz     (MK (mark + 1));
-                                                X86Mov    (L 1, b);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 0, b);
-                                                X86Mark   (MK (mark + 2))])
-                | S y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Pop    (R 1);
-                                                X86Or     (R 0, R 1);
-                                                X86Jz     (MK (mark + 1));
-                                                X86Mov    (L 1, R 1);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 0, R 1);
-                                                X86Mark   (MK (mark + 2));
-                                                X86Push   (R 1)]))
-         | S_EQ      -> (
-            let a::b::stack' = stack in
-              match b with
-              | R x -> (mark + 2, b::stack', [X86Cmp    (a, b);
-                                              X86Je     (MK (mark + 1));
-                                              X86Mov    (L 0, b);
-                                              X86Jmp    (MK (mark + 2));
-                                              X86Mark   (MK (mark + 1));
-                                              X86Mov    (L 1, b);
-                                              X86Mark   (MK (mark + 2))])
-              | S x ->
-                match a with
-                | R y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Cmp    (R 0, b);
-                                                X86Je     (MK (mark + 1));
-                                                X86Mov    (L 0, b);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 1, b);
-                                                X86Mark   (MK (mark + 2))])
-                | S y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Pop    (R 1);
-                                                X86Cmp    (R 0, R 1);
-                                                X86Je     (MK (mark + 1));
-                                                X86Mov    (L 0, R 1);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 1, R 1);
-                                                X86Mark   (MK (mark + 2));
-                                                X86Push   (R 1)]))
-         | S_GT       -> (
-            let a::b::stack' = stack in
-              match b with
-              | R x -> (mark + 2, b::stack', [X86Cmp    (a, b);
-                                              X86Jg     (MK (mark + 1));
-                                              X86Mov    (L 0, b);
-                                              X86Jmp    (MK (mark + 2));
-                                              X86Mark   (MK (mark + 1));
-                                              X86Mov    (L 1, b);
-                                              X86Mark   (MK (mark + 2))])
-              | S x ->
-                match a with
-                | R y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Cmp    (R 0, b);
-                                                X86Jg     (MK (mark + 1));
-                                                X86Mov    (L 0, b);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 1, b);
-                                                X86Mark   (MK (mark + 2))])
-                | S y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Pop    (R 1);
-                                                X86Cmp    (R 0, R 1);
-                                                X86Jg     (MK (mark + 1));
-                                                X86Mov    (L 0, R 1);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 1, R 1);
-                                                X86Mark   (MK (mark + 2));
-                                                X86Push   (R 1)]))
-         | S_GQ      -> (
-            let a::b::stack' = stack in
-              match b with
-              | R x -> (mark + 2, b::stack', [X86Cmp    (a, b);
-                                              X86Jge    (MK (mark + 1));
-                                              X86Mov    (L 0, b);
-                                              X86Jmp    (MK (mark + 2));
-                                              X86Mark   (MK (mark + 1));
-                                              X86Mov    (L 1, b);
-                                              X86Mark   (MK (mark + 2))])
-              | S x ->
-                match a with
-                | R y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Cmp    (R 0, a);
-                                                X86Jge    (MK (mark + 1));
-                                                X86Mov    (L 0, b);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 1, b);
-                                                X86Mark   (MK (mark + 2))])
-                | S y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Pop    (R 1);
-                                                X86Cmp    (R 0, R 1);
-                                                X86Jge    (MK (mark + 1));
-                                                X86Mov    (L 0, R 1);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 1, R 1);
-                                                X86Mark   (MK (mark + 2));
-                                                X86Push   (R 1)]))
-         | S_LT      -> (
-            let a::b::stack' = stack in
-              match b with
-              | R x -> (mark + 2, b::stack', [X86Cmp    (a, b);
-                                              X86Jl     (MK (mark + 1));
-                                              X86Mov    (L 0, b);
-                                              X86Jmp    (MK (mark + 2));
-                                              X86Mark   (MK (mark + 1));
-                                              X86Mov    (L 1, b);
-                                              X86Mark   (MK (mark + 2))])
-              | S x ->
-                match a with
-                | R y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Cmp    (R 0, b);
-                                                X86Jl     (MK (mark + 1));
-                                                X86Mov    (L 0, b);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 1, b);
-                                                X86Mark   (MK (mark + 2))])
-                | S y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Pop    (R 1);
-                                                X86Cmp    (R 0, R 1);
-                                                X86Jl     (MK (mark + 1));
-                                                X86Mov    (L 0, R 1);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 1, R 1);
-                                                X86Mark   (MK (mark + 2));
-                                                X86Push   (R 1)]))
-         | S_LQ      -> (
-            let a::b::stack' = stack in
-              match b with
-              | R x -> (mark + 2, b::stack', [X86Cmp    (a, b);
-                                              X86Jle    (MK (mark + 1));
-                                              X86Mov    (L 0, b);
-                                              X86Jmp    (MK (mark + 2));
-                                              X86Mark   (MK (mark + 1));
-                                              X86Mov    (L 1, b);
-                                              X86Mark   (MK (mark + 2))])
-              | S x ->
-                match a with
-                | R y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Cmp    (R 0, b);
-                                                X86Jle    (MK (mark + 1));
-                                                X86Mov    (L 0, b);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 1, b);
-                                                X86Mark   (MK (mark + 2))])
-                | S y -> (mark + 2, b::stack', [X86Pop    (R 0);
-                                                X86Pop    (R 1);
-                                                X86Cmp    (R 0, R 1);
-                                                X86Jle    (MK (mark + 1));
-                                                X86Mov    (L 0, R 1);
-                                                X86Jmp    (MK (mark + 2));
-                                                X86Mark   (MK (mark + 1));
-                                                X86Mov    (L 1, R 1);
-                                                X86Mark   (MK (mark + 2));
-                                                X86Push   (R 1)]))
+            let r::l::stack' = stack in
+            (mark, l::stack', getDivisionCode l r @ [X86BinInstr (X86Mov, R 1, l)])
+         | S_AND     -> 
+            let r::l::stack' = stack in
+            let (mark', cmd) = getLogicOpCode X86And l r l mark in
+            (mark', l::stack', cmd)
+         | S_OR      -> 
+            let r::l::stack' = stack in
+            let (mark', cmd) = getLogicOpCode X86Or l r l mark in
+            (mark', l::stack', cmd)
+         | S_EQ      ->
+            let r::l::stack' = stack in
+            let (mark', cmd) = getCmpOpCode X86Je l r l mark in
+            (mark', l::stack', cmd)
+         | S_GT       -> 
+            let r::l::stack' = stack in
+            let (mark', cmd) = getCmpOpCode X86Jg l r l mark in
+            (mark', l::stack', cmd)
+         | S_GQ      -> 
+            let r::l::stack' = stack in
+            let (mark', cmd) = getCmpOpCode X86Jge l r l mark in
+            (mark', l::stack', cmd)
+         | S_LT      -> 
+            let r::l::stack' = stack in
+            let (mark', cmd) = getCmpOpCode X86Jl l r l mark in
+            (mark', l::stack', cmd)
+         | S_LQ      ->
+            let r::l::stack' = stack in
+            let (mark', cmd) = getCmpOpCode X86Jle l r l mark in
+            (mark', l::stack', cmd)
        in
        x86code @ (x86compile' mark' stack' code')
   in
-  (x86compile' 0 [] code) @ [X86Mov (L 0, R 0); X86Ret]
+  (x86compile' 0 [] code) @ [X86BinInstr (X86Mov, L 0, R 0); X860RInstr X86Ret]
 
 let x86toStr code =
-    let printOp op =
+    let printOpnd op =
       match op with
       | R n  -> x86regs.(n)
       | M x  -> x
       | L n  -> Printf.sprintf "%s%d" "$" n
-      | MK n -> Printf.sprintf "MK%d" n
+      | MK s -> s
+      | F s  -> s
+      | S n  -> Printf.sprintf "%d(%%ebp)" (-word_size * n)
     in
-    let printCmd cmd =
-      match cmd with
-      | X86Add  (a, b) -> Printf.sprintf "add %s, %s"  (printOp a) (printOp b)
-      | X86Mul  (a, b) -> Printf.sprintf "imul %s, %s" (printOp a) (printOp b)
-      | X86Mov  (a, b) -> Printf.sprintf "mov %s, %s"  (printOp a) (printOp b)
-      | X86And  (a, b) -> Printf.sprintf "and %s, %s"  (printOp a) (printOp b)
-      | X86Or   (a, b) -> Printf.sprintf "or %s, %s"   (printOp a) (printOp b)
-      | X86Div  a      -> Printf.sprintf "div %s"      (printOp a)
-      | X86Push a      -> Printf.sprintf "push %s"     (printOp a)
-      | X86Pop  a      -> Printf.sprintf "pop %s"      (printOp a)
-      | X86Mark a      -> Printf.sprintf "%s:"         (printOp a)
-      | X86Cmp  (a, b) -> Printf.sprintf "cmp %s, %s"  (printOp a) (printOp b)
-      | X86Jmp  a      -> Printf.sprintf "jmp %s"      (printOp a)
-      | X86Je   a      -> Printf.sprintf "je %s"       (printOp a)
-      | X86Jne  a      -> Printf.sprintf "jne %s"      (printOp a)
-      | X86Jz   a      -> Printf.sprintf "jz %s"       (printOp a)
-      | X86Jnz  a      -> Printf.sprintf "jnz %s"      (printOp a)
-      | X86Jl   a      -> Printf.sprintf "jl %s"       (printOp a)
-      | X86Jle  a      -> Printf.sprintf "jle %s"      (printOp a)
-      | X86Jg   a      -> Printf.sprintf "jg %s"       (printOp a)
-      | X86Jge  a      -> Printf.sprintf "jge %s"      (printOp a)
-      | X86Call s      -> Printf.sprintf "call %s"     (s)
-      | X86Cltd        -> "cltd"
-      | X86Ret         -> "ret"
+    let printX86Instr i =
+      match i with
+      | X86Add  -> "add"
+      | X86Sub  -> "sub"
+      | X86Mul  -> "mul"
+      | X86Mov  -> "mov"
+      | X86Cmp  -> "cmp"
+      | X86And  -> "and"
+      | X86Or   -> "or"
+      | X86Div  -> "div"
+      | X86Push -> "push"
+      | X86Pop  -> "pop"
+      | X86Jz   -> "jz"
+      | X86Jnz  -> "jnz"
+      | X86Je   -> "je"
+      | X86Jg   -> "jg"
+      | X86Jge  -> "jge"
+      | X86Jl   -> "jl"
+      | X86Jle  -> "jle"
+      | X86Jne  -> "jne"
+      | X86Jmp  -> "jmp" 
+      | X86Call -> "call"
+      | X86Cltd -> "cltd"
+      | X86Ret  -> "ret"
     in
-    let getVars code =
-      let toOp c =
-        match c with
-        | X86Add (a, b) -> [a; b]
-        | X86Mul (a, b) -> [a; b]
-        | X86Push a     -> [a]
-        | X86Pop  a     -> [a]
-        | X86Mov (a, b) -> [a; b]
-        | _             -> []
+    let printX86Stmt stmt =
+      match stmt with
+      | X86Mark s ->
+        let os = printOpnd s in
+        Printf.sprintf "%s:" os
+      | X860RInstr i -> printX86Instr i
+      | X86BinInstr (i, l, r) -> 
+        let ls = printOpnd l in
+        let rs = printOpnd r in
+        let is = printX86Instr i in
+        Printf.sprintf "%s %s, %s" is ls rs
+      | X86UnInstr (i, o) ->
+        let os = printOpnd o in
+        let is = printX86Instr i in
+        Printf.sprintf "%s %s" is os
+    in
+    let getVars code  =
+      let toOpnd stmt =
+        match stmt with
+        | X86BinInstr (_, a, b) -> [a; b]
+        | X86UnInstr  (_, a)    -> [a]
+        | _                     -> []
       in
       let pr o =
         match o with
@@ -579,10 +402,10 @@ let x86toStr code =
       in
       let toS (M s) = s
       in
-      List.sort_uniq compare (List.map toS (List.filter pr (List.concat (List.map toOp code))))
+      List.sort_uniq compare (List.map toS (List.filter pr (List.concat (List.map toOpnd code))))
     in
     let toVar v = Printf.sprintf ".comm %s %d" v word_size
     in
     let vars : string list = getVars code
     in
-    String.concat "\n" ([".text"] @ (List.map toVar vars) @ [".global main"; "main:"] @ (List.map printCmd code))
+    String.concat "\n" ([".text"] @ (List.map toVar vars) @ [".global main"; "main:"] @ (List.map printX86Stmt code))
