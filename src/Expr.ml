@@ -196,35 +196,34 @@ let allocate stack =
   | (R n)::_ when n < num_of_regs-1 -> R (n+1)
   | _                               -> S 0
 
-type x86instr =
-  | X86Add  
-  | X86Sub  
-  | X86Mul  
-  | X86Mov  
-  | X86Cmp  
-  | X86And  
-  | X86Or   
-  | X86Div  
-  | X86Push 
-  | X86Pop  
-  | X86Jz   
-  | X86Jnz  
-  | X86Je   
-  | X86Jg   
-  | X86Jge  
-  | X86Jl   
-  | X86Jle  
-  | X86Jne  
-  | X86Jmp  
-  | X86Call 
-  | X86Cltd
-  | X86Ret
+let x86add = "add"
+let x86sub = "sub"
+let x86mul = "mul"
+let x86mov = "mov"
+let x86cmp = "cmp"
+let x86div = "div"
+let x86and = "and"
+let x86or  = "or"
+let x86jmp = "jmp"
+let x86jz  = "jz"
+let x86jnz = "jnz"
+let x86je  = "je"
+let x86jne = "jne"
+let x86jl  = "jl"
+let x86jle = "jle"
+let x86jg  = "jg"
+let x86jge = "jge"
+let x86ret  = "ret"
+let x86call = "call"
+let x86cltd = "cltd"
+let x86push = "push"
+let x86pop  = "pop"
 
 type x86stmt =
   | X86Mark     of opnd
-  | X860RInstr  of x86instr
-  | X86UnInstr  of x86instr * opnd
-  | X86BinInstr of x86instr * opnd * opnd
+  | X860RInstr  of string
+  | X86UnInstr  of string * opnd
+  | X86BinInstr of string * opnd * opnd
 
 let x86compile code =
   let rec x86compile' mark stack code =
@@ -233,109 +232,109 @@ let x86compile code =
     | i::code' ->
        let (mark', stack', x86code) =
          let getSimpleArithmCode op l r res = [
-            X86BinInstr (X86Mov, l, R 0);
-            X86BinInstr (X86Mov, r, R 1);
+            X86BinInstr (x86mov, l, R 0);
+            X86BinInstr (x86mov, r, R 1);
             X86BinInstr (op, R 0, R 1);
-            X86BinInstr (X86Mov, R 1, res)]
+            X86BinInstr (x86mov, R 1, res)]
          in
          let getDivisionCode l r = [
-            X86BinInstr (X86Mov, l, R 0);
-            X86BinInstr (X86Mov, r, R 2);
-            X860RInstr  (X86Cltd);
-            X86UnInstr  (X86Div, R 2)]
+            X86BinInstr (x86mov, l, R 0);
+            X86BinInstr (x86mov, r, R 2);
+            X860RInstr  (x86cltd);
+            X86UnInstr  (x86div, R 2)]
          in
          let getLogicOpCode op l r res mark = 
            let m1 = MK Printf.sprintf "MK%d" (mark + 1) in
            let m2 = MK Printf.sprintf "MK%d" (mark + 2) in
-             (mark + 2, [X86BinInstr (X86Mov, l, R 0);
-                         X86BinInstr (X86Mov, r, R 1);
+             (mark + 2, [X86BinInstr (x86mov, l, R 0);
+                         X86BinInstr (x86mov, r, R 1);
                          X86BinInstr (op, R 0, R 1);
-                         X86UnInstr  (X86Jz, m1);
-                         X86BinInstr (X86Mov, L 1, R 2);
-                         X86UnInstr  (X86Jmp, m2);
+                         X86UnInstr  (x86jz, m1);
+                         X86BinInstr (x86mov, L 1, R 2);
+                         X86UnInstr  (x86jmp, m2);
                          X86Mark     m1;
-                         X86BinInstr (X86Mov, L 0, R 2);
+                         X86BinInstr (x86mov, L 0, R 2);
                          X86Mark     m2;
-                         X86BinInstr (X86Mov, R 2, res)])
+                         X86BinInstr (x86mov, R 2, res)])
          in
          let getCmpOpCode op l r res mark =
            let m1 = MK Printf.sprintf "MK%d" (mark + 1) in
            let m2 = MK Printf.sprintf "MK%d" (mark + 2) in
-             (mark + 2, [X86BinInstr (X86Mov, l, R 0);
-                         X86BinInstr (X86Mov, r, R 1);
-                         X86BinInstr (X86Cmp, R 1, R 0);
+             (mark + 2, [X86BinInstr (x86mov, l, R 0);
+                         X86BinInstr (x86mov, r, R 1);
+                         X86BinInstr (x86cmp, R 1, R 0);
                          X86UnInstr  (op, m1);
-                         X86BinInstr (X86Mov, L 0, R 2);
-                         X86UnInstr  (X86Jmp, m2);
+                         X86BinInstr (x86mov, L 0, R 2);
+                         X86UnInstr  (x86jmp, m2);
                          X86Mark     m1;
-                         X86BinInstr (X86Mov, L 1, R 2);
+                         X86BinInstr (x86mov, L 1, R 2);
                          X86Mark     m2;
-                         X86BinInstr (X86Mov, R 2, res)])
+                         X86BinInstr (x86mov, R 2, res)])
          in
          match i with
-         | S_READ   -> (mark, [R 3], [X86UnInstr (X86Call, F "read");
-                                      X86BinInstr (X86Mov, R 0, R 3)])
+         | S_READ   -> (mark, [R 3], [X86UnInstr (x86call, F "read");
+                                      X86BinInstr (x86mov, R 0, R 3)])
          | S_PUSH n ->
             let s = allocate stack in
-            (mark, s::stack, [X86BinInstr (X86Mov, L n, s)])
-         | S_WRITE  -> (mark, [], [X86UnInstr (X86Push, R 3);
-                                   X86UnInstr (X86Call, F "write");
-                                   X86UnInstr (X86Pop, R 3)])
+            (mark, s::stack, [X86BinInstr (x86mov, L n, s)])
+         | S_WRITE  -> (mark, [], [X86UnInstr (x86push, R 3);
+                                   X86UnInstr (x86call, F "write");
+                                   X86UnInstr (x86pop, R 3)])
          | S_ST x   ->
             let a::stack' = stack in
-            (mark, stack',  [X86BinInstr (X86Mov, a, R 0);
-                             X86BinInstr (X86Mov, R 0, M x)])
+            (mark, stack',  [X86BinInstr (x86mov, a, R 0);
+                             X86BinInstr (x86mov, R 0, M x)])
          | S_LD x   ->
             let a = allocate stack in
-            (mark, a::stack, [X86BinInstr (X86Mov, M x, R 0);
-                              X86BinInstr (X86Mov, R 0, a)])
+            (mark, a::stack, [X86BinInstr (x86mov, M x, R 0);
+                              X86BinInstr (x86mov, R 0, a)])
          | S_ADD    ->
             let r::l::stack' = stack in
-            (mark, l::stack', getSimpleArithmCode X86Add l r l)
+            (mark, l::stack', getSimpleArithmCode x86add l r l)
          | S_SUB    -> 
             let r::l::stack' = stack in
-            (mark, l::stack', getSimpleArithmCode X86Sub l r l)
+            (mark, l::stack', getSimpleArithmCode x86sub l r l)
          | S_MUL    -> 
             let r::l::stack' = stack in
-            (mark, l::stack', getSimpleArithmCode X86Mul l r l)
+            (mark, l::stack', getSimpleArithmCode x86mul l r l)
          | S_DIV    -> 
             let r::l::stack' = stack in
-            (mark, l::stack', getDivisionCode l r @ [X86BinInstr (X86Mov, R 0, l)])
+            (mark, l::stack', getDivisionCode l r @ [X86BinInstr (x86mov, R 0, l)])
          | S_MOD    -> 
             let r::l::stack' = stack in
-            (mark, l::stack', getDivisionCode l r @ [X86BinInstr (X86Mov, R 1, l)])
+            (mark, l::stack', getDivisionCode l r @ [X86BinInstr (x86mov, R 1, l)])
          | S_AND     -> 
             let r::l::stack' = stack in
-            let (mark', cmd) = getLogicOpCode X86And l r l mark in
+            let (mark', cmd) = getLogicOpCode x86and l r l mark in
             (mark', l::stack', cmd)
          | S_OR      -> 
             let r::l::stack' = stack in
-            let (mark', cmd) = getLogicOpCode X86Or l r l mark in
+            let (mark', cmd) = getLogicOpCode x86or l r l mark in
             (mark', l::stack', cmd)
          | S_EQ      ->
             let r::l::stack' = stack in
-            let (mark', cmd) = getCmpOpCode X86Je l r l mark in
+            let (mark', cmd) = getCmpOpCode x86je l r l mark in
             (mark', l::stack', cmd)
          | S_GT       -> 
             let r::l::stack' = stack in
-            let (mark', cmd) = getCmpOpCode X86Jg l r l mark in
+            let (mark', cmd) = getCmpOpCode x86jg l r l mark in
             (mark', l::stack', cmd)
          | S_GQ      -> 
             let r::l::stack' = stack in
-            let (mark', cmd) = getCmpOpCode X86Jge l r l mark in
+            let (mark', cmd) = getCmpOpCode x86jge l r l mark in
             (mark', l::stack', cmd)
          | S_LT      -> 
             let r::l::stack' = stack in
-            let (mark', cmd) = getCmpOpCode X86Jl l r l mark in
+            let (mark', cmd) = getCmpOpCode x86jl l r l mark in
             (mark', l::stack', cmd)
          | S_LQ      ->
             let r::l::stack' = stack in
-            let (mark', cmd) = getCmpOpCode X86Jle l r l mark in
+            let (mark', cmd) = getCmpOpCode x86jle l r l mark in
             (mark', l::stack', cmd)
        in
        x86code @ (x86compile' mark' stack' code')
   in
-  (x86compile' 0 [] code) @ [X86BinInstr (X86Mov, L 0, R 0); X860RInstr X86Ret]
+  (x86compile' 0 [] code) @ [X86BinInstr (x86mov, L 0, R 0); X860RInstr x86ret]
 
 let x86toStr code =
     let printOpnd op =
@@ -347,45 +346,18 @@ let x86toStr code =
       | F s  -> s
       | S n  -> Printf.sprintf "%d(%%ebp)" (-word_size * n)
     in
-    let printX86Instr i =
-      match i with
-      | X86Add  -> "add"
-      | X86Sub  -> "sub"
-      | X86Mul  -> "mul"
-      | X86Mov  -> "mov"
-      | X86Cmp  -> "cmp"
-      | X86And  -> "and"
-      | X86Or   -> "or"
-      | X86Div  -> "div"
-      | X86Push -> "push"
-      | X86Pop  -> "pop"
-      | X86Jz   -> "jz"
-      | X86Jnz  -> "jnz"
-      | X86Je   -> "je"
-      | X86Jg   -> "jg"
-      | X86Jge  -> "jge"
-      | X86Jl   -> "jl"
-      | X86Jle  -> "jle"
-      | X86Jne  -> "jne"
-      | X86Jmp  -> "jmp" 
-      | X86Call -> "call"
-      | X86Cltd -> "cltd"
-      | X86Ret  -> "ret"
-    in
     let printX86Stmt stmt =
       match stmt with
       | X86Mark s ->
         let os = printOpnd s in
         Printf.sprintf "%s:" os
-      | X860RInstr i -> printX86Instr i
-      | X86BinInstr (i, l, r) -> 
+      | X860RInstr is -> is
+      | X86BinInstr (is, l, r) -> 
         let ls = printOpnd l in
         let rs = printOpnd r in
-        let is = printX86Instr i in
         Printf.sprintf "%s %s, %s" is ls rs
-      | X86UnInstr (i, o) ->
+      | X86UnInstr (is, o) ->
         let os = printOpnd o in
-        let is = printX86Instr i in
         Printf.sprintf "%s %s" is os
     in
     let getVars code  =
