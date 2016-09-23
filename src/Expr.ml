@@ -1,22 +1,7 @@
-type op = 
-  | Add
-  | Sub
-  | Mul
-  | Div
-  | Mod
-  | Gt
-  | Gq
-  | Lt
-  | Lq
-  | Eq
-  | Nq
-  | And
-  | Or
-
 type expr =
   | Const of int
   | Var   of string
-  | BinOp of op * expr * expr
+  | BinOp of string * expr * expr
 
 let rec eval state expr =
   match expr with
@@ -26,19 +11,19 @@ let rec eval state expr =
     let lv = eval state l in
     let rv = eval state r in
     match o with
-    | Add -> lv + rv
-    | Sub -> lv - rv
-    | Mul -> lv * rv
-    | Div -> lv / rv
-    | Mod -> lv mod rv
-    | And -> if lv != 0 && rv != 0 then 1 else 0
-    | Or  -> if lv != 0 || rv != 0 then 1 else 0
-    | Eq  -> if lv == rv then 1 else 0
-    | Nq  -> if lv != rv then 1 else 0
-    | Gq  -> if lv >= rv then 1 else 0
-    | Lq  -> if lv <= rv then 1 else 0
-    | Gt  -> if lv > rv then 1 else 0
-    | Lt  -> if lv < rv then 1 else 0
+    | "+"  -> lv + rv
+    | "-"  -> lv - rv
+    | "*"  -> lv * rv
+    | "/"  -> lv / rv
+    | "%"  -> lv mod rv
+    | "&&" -> if lv != 0 && rv != 0 then 1 else 0
+    | "||" -> if lv != 0 || rv != 0 then 1 else 0
+    | "==" -> if lv == rv then 1 else 0
+    | "!=" -> if lv != rv then 1 else 0
+    | ">=" -> if lv >= rv then 1 else 0
+    | "<=" -> if lv <= rv then 1 else 0
+    | ">"  -> if lv > rv then 1 else 0
+    | "<"  -> if lv < rv then 1 else 0
 
 type stmt =
   | Skip
@@ -154,19 +139,19 @@ let rec compile_expr expr =
     let lc = compile_expr l in
     let rc = compile_expr r in
     match o with
-    | Add -> lc @ rc @ [S_ADD]
-    | Sub -> lc @ rc @ [S_SUB]
-    | Mul -> lc @ rc @ [S_MUL]
-    | Div -> lc @ rc @ [S_DIV]
-    | Mod -> lc @ rc @ [S_MOD]
-    | And -> lc @ rc @ [S_AND]
-    | Or  -> lc @ rc @ [S_OR]
-    | Eq  -> lc @ rc @ [S_EQ]
-    | Nq  -> lc @ rc @ [S_NQ]
-    | Lt  -> lc @ rc @ [S_LT]
-    | Gt  -> lc @ rc @ [S_GT]
-    | Lq  -> lc @ rc @ [S_LQ]
-    | Gq  -> lc @ rc @ [S_GQ]
+    | "+"  -> lc @ rc @ [S_ADD]
+    | "-"  -> lc @ rc @ [S_SUB]
+    | "*"  -> lc @ rc @ [S_MUL]
+    | "/"  -> lc @ rc @ [S_DIV]
+    | "%"  -> lc @ rc @ [S_MOD]
+    | "&&" -> lc @ rc @ [S_AND]
+    | "||" -> lc @ rc @ [S_OR]
+    | "==" -> lc @ rc @ [S_EQ]
+    | "!=" -> lc @ rc @ [S_NQ]
+    | "<"  -> lc @ rc @ [S_LT]
+    | ">"  -> lc @ rc @ [S_GT]
+    | "<=" -> lc @ rc @ [S_LQ]
+    | ">=" -> lc @ rc @ [S_GQ]
   
 
 let rec compile_stmt stmt =

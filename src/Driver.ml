@@ -16,13 +16,13 @@ write (z+y)
 let ( !! )       = (!)
 let ( !  ) x     = Var x
 let ( $  ) n     = Const n
-let ( +  ) e1 e2 = BinOp (Add, e1, e2)
-let ( *  ) e1 e2 = BinOp (Mul, e1, e2)
-let ( /  ) e1 e2 = BinOp (Div, e1, e2)
-let ( %  ) e1 e2 = BinOp (Mod, e1, e2)
-let ( && ) e1 e2 = BinOp (And, e1, e2)
-let ( >  ) e1 e2 = BinOp (Gt, e1, e2)
-let ( == ) e1 e2 = BinOp (Eq, e1, e2)
+let ( +  ) e1 e2 = BinOp ("+", e1, e2)
+let ( *  ) e1 e2 = BinOp ("*", e1, e2)
+let ( /  ) e1 e2 = BinOp ("/", e1, e2)
+let ( %  ) e1 e2 = BinOp ("%", e1, e2)
+let ( && ) e1 e2 = BinOp ("&&", e1, e2)
+let ( >  ) e1 e2 = BinOp (">", e1, e2)
+let ( == ) e1 e2 = BinOp ("==", e1, e2)
 
 let skip     = Skip
 let (:=) x e = Assign (x, e)
@@ -34,7 +34,6 @@ let (|>) l r = Seq (l, r)
 let p =
   read "x" |>
   read "y" |>
-  ("z" := (BinOp (And, (!"x" > !"y"), BinOp (Eq, (!"x" % !"y"), Const 0)))) |>
   write (!"z")
 
 
