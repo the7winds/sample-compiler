@@ -7,7 +7,7 @@ let rec eval state expr =
   match expr with
   | Const  n     -> n
   | Var    x     -> state x
-  | BinOp (o, l, r) -> 
+  | BinOp (o, l, r) ->
     let lv = eval state l in
     let rv = eval state r in
     match o with
@@ -31,7 +31,10 @@ type stmt =
   | Write  of expr
   | Assign of string * expr
   | Seq    of stmt * stmt
-                       
+  | If     of expr * stmt
+  | IfElse of expr * stmt * stmt
+  | While  of expr * stmt
+
 let run input stmt =
   let rec run' ((state, input, output) as c) stmt =
     let state' x = List.assoc x state in
@@ -41,18 +44,39 @@ let run input stmt =
     | Assign (x, e) -> ((x, eval state' e) :: state, input, output)
     | Write   e     -> (state, input, output @ [eval state' e])
     | Read    x     ->
-       let y::input' = input in
-       ((x, y) :: state, input', output)
+        let y::input' = input in
+        ((x, y) :: state, input', output)
+    | If     (e, s)      ->
+        if eval state' e > 0
+            then run' c s
+            else c
+    | IfElse (e, s1, s2) ->
+        if eval state' e > 0
+            then run' c s1
+            else run' c s2
+    | While  (e, s) ->
+        let rec whileDo e s ((state, input, output) as c) =
+          let state' x = List.assoc x state in
+            if eval state' e > 0 then
+                let c' = run' c s in
+                whileDo e s c'
+            else c
+       in
+       whileDo e s c
   in
   let (_, _, result) = run' ([], input, []) stmt in
   result
-    
+
 type instr =
   | S_READ
   | S_WRITE
   | S_PUSH  of int
   | S_LD    of string
   | S_ST    of string
+  | S_LBL   of string
+  | S_JMP   of string
+  | S_JZ    of string
+  | S_JNZ   of string
   | S_ADD
   | S_SUB
   | S_MUL
@@ -68,68 +92,93 @@ type instr =
   | S_GQ
 
 let srun input code =
-  let rec srun' (state, stack, input, output) code =
-    match code with
+  let rec srun' ((state, stack, input, output) as context) ((upperCode, lowerCode) as code) =
+    match lowerCode with
     | []       -> output
     | i::code' ->
-       srun'
-         (match i with
-          | S_READ ->
-             let y::input' = input in
-             (state, y::stack, input', output)
-          | S_WRITE ->
-             let y::stack' = stack in
-             (state, stack', input, output @ [y])
-          | S_PUSH n ->
-             (state, n::stack, input, output)
-          | S_LD x ->
-             (state, (List.assoc x state)::stack, input, output)
-          | S_ST x ->
-             let y::stack' = stack in
-             ((x, y)::state, stack', input, output)
-          | S_ADD ->
-             let y::x::stack' = stack in
-             (state, (x+y)::stack', input, output)
-          | S_SUB ->
-             let y::x::stack' = stack in
-             (state, (x-y)::stack', input, output)
-          | S_MUL ->
-             let y::x::stack' = stack in
-             (state, (x*y)::stack', input, output)
-          | S_DIV ->
-             let y::x::stack' = stack in
-             (state, (x/y)::stack', input, output)
-          | S_MOD ->
-             let y::x::stack' = stack in
-             (state, (x mod y)::stack', input, output)
-          | S_AND ->
-             let y::x::stack' = stack in
-             (state, (if x * y > 0 then 1 else 0)::stack', input, output)
-          | S_OR  ->
-             let y::x::stack' = stack in
-             (state, (if x + y > 0 then 1 else 0)::stack', input, output)
-          | S_EQ  ->
-             let y::x::stack' = stack in
-             (state, (if x == y then 1 else 0)::stack', input, output)
-          | S_NQ ->
-             let y::x::stack' = stack in
-             (state, (if x != y then 1 else 0)::stack', input, output)
-          | S_GQ  ->
-             let y::x::stack' = stack in
-             (state, (if y >= x then 1 else 0)::stack', input, output)
-          | S_LQ ->
-             let y::x::stack' = stack in
-             (state, (if y <= x then 1 else 0)::stack', input, output)
-          | S_GT  ->
-             let y::x::stack' = stack in
-             (state, (if y > x then 1 else 0)::stack', input, output)
-          | S_LT ->
-             let y::x::stack' = stack in
-             (state, (if y < x then 1 else 0)::stack', input, output)
-         )
-         code'
+       let rec splitByLabel (l, r) s =
+          match r with
+          | []    -> (l, r)
+          | a::rs ->
+             match a with
+             | S_LBL s -> (a::l, rs)
+             | _       -> splitByLabel (a::l, rs) s
+       in
+       let goto (upperCode, lowerCode) s =
+          let (l, r) = splitByLabel ([], lowerCode) s in
+          match l with
+          | (S_LBL s)::ls -> (l @ upperCode, r)
+          | _ ->
+            let (l', r') = splitByLabel ([], upperCode) s in
+            (r', l' @ lowerCode)
+       in
+       match i with
+       | S_JMP s -> srun' context (goto code s)
+       | S_JZ  s ->
+          let c::stack' = stack in
+          srun' (state, stack', input, output) (if (c == 0) then goto code s else (i::upperCode, code'))
+       | S_JNZ s ->
+          let c::stack' = stack in
+          srun' (state, stack', input, output) (if (c != 0) then goto code s else (i::upperCode, code'))
+       | _ -> srun' (
+              match i with
+              | S_READ ->
+                 let y::input' = input in
+                 (state, y::stack, input', output)
+              | S_WRITE ->
+                 let y::stack' = stack in
+                 (state, stack', input, output @ [y])
+              | S_PUSH n ->
+                 (state, n::stack, input, output)
+              | S_LD x ->
+                 (state, (List.assoc x state)::stack, input, output)
+              | S_ST x ->
+                 let y::stack' = stack in
+                 ((x, y)::state, stack', input, output)
+              | S_ADD ->
+                 let y::x::stack' = stack in
+                 (state, (x+y)::stack', input, output)
+              | S_SUB ->
+                 let y::x::stack' = stack in
+                 (state, (x-y)::stack', input, output)
+              | S_MUL ->
+                 let y::x::stack' = stack in
+                 (state, (x*y)::stack', input, output)
+              | S_DIV ->
+                 let y::x::stack' = stack in
+                 (state, (x/y)::stack', input, output)
+              | S_MOD ->
+                 let y::x::stack' = stack in
+                 (state, (x mod y)::stack', input, output)
+              | S_AND ->
+                 let y::x::stack' = stack in
+                 (state, (if x * y > 0 then 1 else 0)::stack', input, output)
+              | S_OR  ->
+                 let y::x::stack' = stack in
+                 (state, (if x + y > 0 then 1 else 0)::stack', input, output)
+              | S_EQ  ->
+                 let y::x::stack' = stack in
+                 (state, (if x == y then 1 else 0)::stack', input, output)
+              | S_NQ ->
+                 let y::x::stack' = stack in
+                 (state, (if x != y then 1 else 0)::stack', input, output)
+              | S_GQ  ->
+                 let y::x::stack' = stack in
+                 (state, (if y >= x then 1 else 0)::stack', input, output)
+              | S_LQ ->
+                 let y::x::stack' = stack in
+                 (state, (if y <= x then 1 else 0)::stack', input, output)
+              | S_GT  ->
+                 let y::x::stack' = stack in
+                 (state, (if y > x then 1 else 0)::stack', input, output)
+              | S_LT ->
+                 let y::x::stack' = stack in
+                 (state, (if y < x then 1 else 0)::stack', input, output)
+              | S_LBL s -> context
+             )
+             (i::upperCode, code')
   in
-  srun' ([], [], input, []) code
+  srun' ([], [], input, []) ([], code)
 
 let rec compile_expr expr =
   match expr with
@@ -152,26 +201,50 @@ let rec compile_expr expr =
     | ">"  -> lc @ rc @ [S_GT]
     | "<=" -> lc @ rc @ [S_LQ]
     | ">=" -> lc @ rc @ [S_GQ]
-  
 
-let rec compile_stmt stmt =
-  match stmt with
-  | Skip          -> []
-  | Assign (x, e) -> compile_expr e @ [S_ST x]
-  | Read    x     -> [S_READ; S_ST x]
-  | Write   e     -> compile_expr e @ [S_WRITE]
-  | Seq    (l, r) -> compile_stmt l @ compile_stmt r
+
+let compile_stmt stmt =
+   let rec compile_stmt' stmt lbl =
+      match stmt with
+      | Skip          -> ([], lbl)
+      | Assign (x, e) -> (compile_expr e @ [S_ST x], lbl)
+      | Read    x     -> ([S_READ; S_ST x], lbl)
+      | Write   e     -> (compile_expr e  @ [S_WRITE], lbl)
+      | Seq    (l, r) ->
+        let (cmdl, llbl) = compile_stmt' l lbl in
+        let (cmdr, rlbl) = compile_stmt' r llbl in
+        (cmdl @ cmdr, rlbl)
+      | If (e, s) ->
+        let ec = compile_expr e in
+        let ls = Printf.sprintf "LS%d" lbl in
+        let (sc, lbl') = compile_stmt' stmt (lbl + 1) in
+        (ec @ [S_JZ ls] @ sc @ [S_LBL ls], lbl')
+      | IfElse (e, s1, s2) ->
+        let ec = compile_expr e in
+        let ls = Printf.sprintf "LS%d" lbl in
+        let (sc1, lbl1) = compile_stmt' s1 (lbl + 1) in
+        let (sc2, lbl2) = compile_stmt' s2 lbl1 in
+        (ec @ [S_JZ ls] @ sc1 @ [S_LBL ls] @ sc2, lbl2)
+      | While (e, s) ->
+        let ec  = compile_expr e in
+        let ls1 = Printf.sprintf "LS%d" lbl in
+        let ls2 = Printf.sprintf "LS%d" (lbl + 1) in
+        let (sc, lbl') = compile_stmt' s (lbl + 2) in
+        ([S_LBL ls1] @ ec @ [S_JZ ls2] @ sc @ [S_JMP ls1] @ [S_LBL ls2], lbl')
+   in
+   let (code, _) = compile_stmt' stmt 1 in code
+
 
 let x86regs = [|"%eax"; "%edx"; "%ebx"; "%ecx"; "%esi"; "%edi"|]
 let num_of_regs = Array.length x86regs
 let word_size = 4
 
-type opnd = 
+type opnd =
   | R  of int        (* for register mem *)
   | S  of int        (* for stack mem    *)
   | M  of string     (* for static vars  *)
   | L  of int        (* for immidiate    *)
-  | MK of string     (* for marks        *)
+  | LB of string     (* for labels        *)
   | F  of string     (* for functions    *)
 
 let allocate stack =
@@ -205,17 +278,17 @@ let x86push = "push"
 let x86pop  = "pop"
 
 type x86stmt =
-  | X86Mark     of opnd
+  | X86Label     of opnd
   | X860RInstr  of string
   | X86UnInstr  of string * opnd
   | X86BinInstr of string * opnd * opnd
 
 let x86compile code =
-  let rec x86compile' mark stack code =
+  let rec x86compile' label stack code =
     match code with
     | []       -> []
     | i::code' ->
-       let (mark', stack', x86code) =
+       let (label', stack', x86code) =
          let getSimpleArithmCode op l r res = [
             X86BinInstr (x86mov, l, R 0);
             X86BinInstr (x86mov, r, R 1);
@@ -228,96 +301,102 @@ let x86compile code =
             X860RInstr  (x86cltd);
             X86UnInstr  (x86div, R 2)]
          in
-         let getLogicOpCode op l r res mark = 
-           let m1 = MK Printf.sprintf "MK%d" (mark + 1) in
-           let m2 = MK Printf.sprintf "MK%d" (mark + 2) in
-             (mark + 2, [X86BinInstr (x86mov, l, R 0);
+         let getLogicOpCode op l r res label =
+           let m1 = LB Printf.sprintf "LC%d" (label + 1) in
+           let m2 = LB Printf.sprintf "LC%d" (label + 2) in
+             (label + 2, [X86BinInstr (x86mov, l, R 0);
                          X86BinInstr (x86mov, r, R 1);
                          X86BinInstr (op, R 0, R 1);
                          X86UnInstr  (x86jz, m1);
                          X86BinInstr (x86mov, L 1, R 2);
                          X86UnInstr  (x86jmp, m2);
-                         X86Mark     m1;
+                         X86Label     m1;
                          X86BinInstr (x86mov, L 0, R 2);
-                         X86Mark     m2;
+                         X86Label     m2;
                          X86BinInstr (x86mov, R 2, res)])
          in
-         let getCmpOpCode op l r res mark =
-           let m1 = MK Printf.sprintf "MK%d" (mark + 1) in
-           let m2 = MK Printf.sprintf "MK%d" (mark + 2) in
-             (mark + 2, [X86BinInstr (x86mov, l, R 0);
+         let getCmpOpCode op l r res label =
+           let m1 = LB Printf.sprintf "LC%d" (label + 1) in
+           let m2 = LB Printf.sprintf "LC%d" (label + 2) in
+             (label + 2, [X86BinInstr (x86mov, l, R 0);
                          X86BinInstr (x86mov, r, R 1);
                          X86BinInstr (x86cmp, R 1, R 0);
                          X86UnInstr  (op, m1);
                          X86BinInstr (x86mov, L 0, R 2);
                          X86UnInstr  (x86jmp, m2);
-                         X86Mark     m1;
+                         X86Label     m1;
                          X86BinInstr (x86mov, L 1, R 2);
-                         X86Mark     m2;
+                         X86Label     m2;
                          X86BinInstr (x86mov, R 2, res)])
          in
          match i with
-         | S_READ   -> (mark, [R 3], [X86UnInstr (x86call, F "read");
+         | S_READ   -> (label, [R 3], [X86UnInstr (x86call, F "read");
                                       X86BinInstr (x86mov, R 0, R 3)])
          | S_PUSH n ->
             let s = allocate stack in
-            (mark, s::stack, [X86BinInstr (x86mov, L n, s)])
-         | S_WRITE  -> (mark, [], [X86UnInstr (x86push, R 3);
+            (label, s::stack, [X86BinInstr (x86mov, L n, s)])
+         | S_WRITE  -> (label, [], [X86UnInstr (x86push, R 3);
                                    X86UnInstr (x86call, F "write");
                                    X86UnInstr (x86pop, R 3)])
          | S_ST x   ->
             let a::stack' = stack in
-            (mark, stack',  [X86BinInstr (x86mov, a, R 0);
+            (label, stack',  [X86BinInstr (x86mov, a, R 0);
                              X86BinInstr (x86mov, R 0, M x)])
          | S_LD x   ->
             let a = allocate stack in
-            (mark, a::stack, [X86BinInstr (x86mov, M x, R 0);
+            (label, a::stack, [X86BinInstr (x86mov, M x, R 0);
                               X86BinInstr (x86mov, R 0, a)])
          | S_ADD    ->
             let r::l::stack' = stack in
-            (mark, l::stack', getSimpleArithmCode x86add l r l)
-         | S_SUB    -> 
+            (label, l::stack', getSimpleArithmCode x86add l r l)
+         | S_SUB    ->
             let r::l::stack' = stack in
-            (mark, l::stack', getSimpleArithmCode x86sub l r l)
-         | S_MUL    -> 
+            (label, l::stack', getSimpleArithmCode x86sub l r l)
+         | S_MUL    ->
             let r::l::stack' = stack in
-            (mark, l::stack', getSimpleArithmCode x86mul l r l)
-         | S_DIV    -> 
+            (label, l::stack', getSimpleArithmCode x86mul l r l)
+         | S_DIV    ->
             let r::l::stack' = stack in
-            (mark, l::stack', getDivisionCode l r @ [X86BinInstr (x86mov, R 0, l)])
-         | S_MOD    -> 
+            (label, l::stack', getDivisionCode l r @ [X86BinInstr (x86mov, R 0, l)])
+         | S_MOD    ->
             let r::l::stack' = stack in
-            (mark, l::stack', getDivisionCode l r @ [X86BinInstr (x86mov, R 1, l)])
-         | S_AND     -> 
+            (label, l::stack', getDivisionCode l r @ [X86BinInstr (x86mov, R 1, l)])
+         | S_AND     ->
             let r::l::stack' = stack in
-            let (mark', cmd) = getLogicOpCode x86and l r l mark in
-            (mark', l::stack', cmd)
-         | S_OR      -> 
+            let (label', cmd) = getLogicOpCode x86and l r l label in
+            (label', l::stack', cmd)
+         | S_OR      ->
             let r::l::stack' = stack in
-            let (mark', cmd) = getLogicOpCode x86or l r l mark in
-            (mark', l::stack', cmd)
+            let (label', cmd) = getLogicOpCode x86or l r l label in
+            (label', l::stack', cmd)
          | S_EQ      ->
             let r::l::stack' = stack in
-            let (mark', cmd) = getCmpOpCode x86je l r l mark in
-            (mark', l::stack', cmd)
-         | S_GT       -> 
+            let (label', cmd) = getCmpOpCode x86je l r l label in
+            (label', l::stack', cmd)
+         | S_GT       ->
             let r::l::stack' = stack in
-            let (mark', cmd) = getCmpOpCode x86jg l r l mark in
-            (mark', l::stack', cmd)
-         | S_GQ      -> 
+            let (label', cmd) = getCmpOpCode x86jg l r l label in
+            (label', l::stack', cmd)
+         | S_GQ      ->
             let r::l::stack' = stack in
-            let (mark', cmd) = getCmpOpCode x86jge l r l mark in
-            (mark', l::stack', cmd)
-         | S_LT      -> 
+            let (label', cmd) = getCmpOpCode x86jge l r l label in
+            (label', l::stack', cmd)
+         | S_LT      ->
             let r::l::stack' = stack in
-            let (mark', cmd) = getCmpOpCode x86jl l r l mark in
-            (mark', l::stack', cmd)
+            let (label', cmd) = getCmpOpCode x86jl l r l label in
+            (label', l::stack', cmd)
          | S_LQ      ->
             let r::l::stack' = stack in
-            let (mark', cmd) = getCmpOpCode x86jle l r l mark in
-            (mark', l::stack', cmd)
+            let (label', cmd) = getCmpOpCode x86jle l r l label in
+            (label', l::stack', cmd)
+         | S_LBL s   ->
+            (label + 1, stack, [X86Label (LB s)])
+         | S_JMP s   ->
+            (label, stack, [X86UnInstr (x86jmp, LB s)])
+         | S_JZ s    ->
+            (label, stack, [X86UnInstr (x86jz, LB s)])
        in
-       x86code @ (x86compile' mark' stack' code')
+       x86code @ (x86compile' label' stack' code')
   in
   (x86compile' 0 [] code) @ [X86BinInstr (x86mov, L 0, R 0); X860RInstr x86ret]
 
@@ -327,17 +406,17 @@ let x86toStr code =
       | R n  -> x86regs.(n)
       | M x  -> x
       | L n  -> Printf.sprintf "%s%d" "$" n
-      | MK s -> s
+      | LB s -> s
       | F s  -> s
       | S n  -> Printf.sprintf "%d(%%ebp)" (-word_size * n)
     in
     let printX86Stmt stmt =
       match stmt with
-      | X86Mark s ->
+      | X86Label s ->
         let os = printOpnd s in
         Printf.sprintf "%s:" os
       | X860RInstr is -> is
-      | X86BinInstr (is, l, r) -> 
+      | X86BinInstr (is, l, r) ->
         let ls = printOpnd l in
         let rs = printOpnd r in
         Printf.sprintf "%s %s, %s" is ls rs
