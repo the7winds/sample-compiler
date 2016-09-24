@@ -445,3 +445,9 @@ let x86toStr code =
     let vars : string list = getVars code
     in
     String.concat "\n" ([".text"] @ (List.map toVar vars) @ [".global main"; "main:"] @ (List.map printX86Stmt code))
+
+let build stmt name =
+  let outf = open_out (Printf.sprintf "%s.s" name) in
+  Printf.fprintf outf "%s" (x86toStr @@ x86compile @@ compile_stmt @@ stmt);
+  close_out outf;
+  Sys.command (Printf.sprintf "gcc -m32 -o %s ../runtime/runtime.o %s.s" name name)

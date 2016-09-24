@@ -1,4 +1,5 @@
 open Expr
+open Parser
 
 (*
 read (x);
@@ -48,14 +49,13 @@ let p =
   read "x" |>
   read "y" |>
   ("z" := !"x" * !"x") |>
-  write (!"z" + !"y")  |>
-  read "z" |>
-  write (!"z")
+  write (!"z" + !"y")
 
+(*
 let _ =
   let [r] = run [3; 4] p in
   Printf.printf "%d\n" r
-                
+
 let run input p =
   srun input (compile_stmt p)
 
@@ -63,18 +63,13 @@ let _ =
   let [r] = run [3; 4] p in
   Printf.printf "%d\n" r
 *)
-
-let run' code = Printf.printf "%s" (x86toStr (x86compile (compile_stmt code)))
-
-(*
-let _ = 
-    let p =
-      read "x" |>
-      read "y" |>
-      ("z" := !"x" * !"x") |>
-      write (!"z")  
-    in
-    run' p
 *)
 
-let _ = run' p
+let main =
+  try
+    let filename = Sys.argv.(1) in
+    match Parser.parse filename with
+    | `Ok stmt -> ignore @@ Expr.build stmt (Filename.chop_suffix filename ".expr")
+    | `Fail er -> Printf.eprintf "%s" er
+  with Invalid_argument _ ->
+    Printf.printf "Usage: rc.byte <name.expr>"
