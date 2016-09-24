@@ -256,7 +256,7 @@ let allocate stack =
 
 let x86add = "add"
 let x86sub = "sub"
-let x86mul = "mul"
+let x86mul = "imul"
 let x86mov = "mov"
 let x86cmp = "cmp"
 let x86div = "div"
