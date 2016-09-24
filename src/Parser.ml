@@ -3,14 +3,35 @@ open Matcher
 open Expr
 
 ostap (
-    expr: addi;
+    expr: prior2;
 
-    addi:
-      l:multi  suf:("+" r:multi)*  { List.fold_left (fun l (op, r) -> BinOp ("+", l, r)) l suf };
+    addTail:
+      "+" a:prior1 tail:("+" r:prior1)*
+      { ("+", a)::(List.map (fun (op, r) -> ("+", r)) tail) };
+    subTail:
+      "-" a:prior1 tail:("-" r:prior1)*
+      { ("-", a)::(List.map (fun (op, r) -> ("-", r)) tail) };
+    addOrSubTail: addTail | subTail;
+    prior2tail:
+      tail:(l:addOrSubTail)* { List.concat tail };
 
-    multi:
-      l:primary "*" r:multi { BinOp ("*", l, r) }
-    | primary;
+    prior2:
+      l:prior1 suf:prior2tail
+            { List.fold_left (fun l (op, r) -> BinOp (op, l, r)) l suf };
+
+    mulTail:
+      "*" a:primary tail:("*" r:primary)*
+            { ("*", a)::(List.map (fun (op, r) -> ("*", r)) tail) };
+    divTail:
+      "/" a:primary tail:("/" r:primary)*
+            { ("/", a)::(List.map (fun (op, r) -> ("/", r)) tail) };
+    mulOrDivTail: mulTail | divTail;
+    prior1tail:
+      tail:(l:mulOrDivTail)* { List.concat tail };
+
+    prior1:
+      l:primary suf:prior1tail
+            { List.fold_left (fun l (op, r) -> BinOp (op, l, r)) l suf };
 
     primary:
       c:DECIMAL { Const c }
@@ -24,10 +45,17 @@ ostap (
     | simple;
 
     simple:
-      %"read"  "(" name:IDENT ")" { Read name       }
-    | %"write" "(" e:expr     ")" { Write e         }
-    | %"skip"                     { Skip            }
-    | x:IDENT ":=" e:expr         { Assign (x , e)  }
+      %"read"  "(" name:IDENT ")"            { Read name          }
+    | %"write" "(" e:expr     ")"            { Write e            }
+    | %"skip"                                { Skip               }
+    | x:IDENT ":=" e:expr                    { Assign (x , e)     }
+    | %"if"    "(" e:expr     ")" "{" s1:stmt "}"
+        "else"                    "{" s2:stmt "}"
+                                             { IfElse (e, s1, s2) }
+    | %"if"    "(" e:expr     ")" "{" s:stmt  "}"
+                                             { If (e, s)          }
+    | %"while" "(" e:expr     ")" "{" s:stmt  "}"
+                                             { While (e, s)       }
 )
 
 let parse infile =
