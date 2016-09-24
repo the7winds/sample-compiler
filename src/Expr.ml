@@ -235,7 +235,7 @@ let compile_stmt stmt =
    let (code, _) = compile_stmt' stmt 1 in code
 
 
-let x86regs = [|"%eax"; "%edx"; "%ebx"; "%ecx"; "%esi"; "%edi"|]
+let x86regs = [|"%eax"; "%edx"; "%ebx"; "%esp"; "%ebp"; "%ecx"; "%esi"; "%edi"|]
 let num_of_regs = Array.length x86regs
 let word_size = 4
 
@@ -244,15 +244,23 @@ type opnd =
   | S  of int        (* for stack mem    *)
   | M  of string     (* for static vars  *)
   | L  of int        (* for immidiate    *)
-  | LB of string     (* for labels        *)
+  | LB of string     (* for labels       *)
   | F  of string     (* for functions    *)
+
+let stack_start_reg = R 5
 
 let allocate stack =
   match stack with
-  | []                              -> R 3
+  | []                              -> stack_start_reg
   | (S n)::_                        -> S (n+1)
   | (R n)::_ when n < num_of_regs-1 -> R (n+1)
   | _                               -> S 0
+
+let eax = R 0
+let ebx = R 2
+let edx = R 1
+let esp = R 3
+let ebp = R 4
 
 let x86add = "add"
 let x86sub = "sub"
@@ -290,62 +298,66 @@ let x86compile code =
     | i::code' ->
        let (label', stack', x86code) =
          let getSimpleArithmCode op l r res = [
-            X86BinInstr (x86mov, l, R 0);
-            X86BinInstr (x86mov, r, R 1);
-            X86BinInstr (op, R 0, R 1);
-            X86BinInstr (x86mov, R 1, res)]
+            X86BinInstr (x86mov, l, eax);
+            X86BinInstr (x86mov, r, edx);
+            X86BinInstr (op, eax, edx);
+            X86BinInstr (x86mov, edx, res)]
          in
          let getDivisionCode l r = [
-            X86BinInstr (x86mov, l, R 0);
-            X86BinInstr (x86mov, r, R 2);
+            X86BinInstr (x86mov, l, eax);
+            X86BinInstr (x86mov, r, ebx);
             X860RInstr  (x86cltd);
-            X86UnInstr  (x86div, R 2)]
+            X86UnInstr  (x86div, ebx)]
          in
          let getLogicOpCode op l r res label =
            let m1 = LB Printf.sprintf "LC%d" (label + 1) in
            let m2 = LB Printf.sprintf "LC%d" (label + 2) in
-             (label + 2, [X86BinInstr (x86mov, l, R 0);
-                         X86BinInstr (x86mov, r, R 1);
-                         X86BinInstr (op, R 0, R 1);
+             (label + 2, [X86BinInstr (x86mov, l, eax);
+                         X86BinInstr (x86mov, r, edx);
+                         X86BinInstr (op, eax, edx);
                          X86UnInstr  (x86jz, m1);
-                         X86BinInstr (x86mov, L 1, R 2);
+                         X86BinInstr (x86mov, L 1, ebx);
                          X86UnInstr  (x86jmp, m2);
                          X86Label     m1;
-                         X86BinInstr (x86mov, L 0, R 2);
+                         X86BinInstr (x86mov, L 0, ebx);
                          X86Label     m2;
-                         X86BinInstr (x86mov, R 2, res)])
+                         X86BinInstr (x86mov, ebx, res)])
          in
          let getCmpOpCode op l r res label =
            let m1 = LB Printf.sprintf "LC%d" (label + 1) in
            let m2 = LB Printf.sprintf "LC%d" (label + 2) in
-             (label + 2, [X86BinInstr (x86mov, l, R 0);
-                         X86BinInstr (x86mov, r, R 1);
-                         X86BinInstr (x86cmp, R 1, R 0);
+             (label + 2, [X86BinInstr (x86mov, l, eax);
+                         X86BinInstr (x86mov, r, edx);
+                         X86BinInstr (x86cmp, edx, eax);
                          X86UnInstr  (op, m1);
-                         X86BinInstr (x86mov, L 0, R 2);
+                         X86BinInstr (x86mov, L 0, ebx);
                          X86UnInstr  (x86jmp, m2);
                          X86Label     m1;
-                         X86BinInstr (x86mov, L 1, R 2);
+                         X86BinInstr (x86mov, L 1, ebx);
                          X86Label     m2;
-                         X86BinInstr (x86mov, R 2, res)])
+                         X86BinInstr (x86mov, ebx, res)])
          in
          match i with
-         | S_READ   -> (label, [R 3], [X86UnInstr (x86call, F "read");
-                                      X86BinInstr (x86mov, R 0, R 3)])
-         | S_PUSH n ->
+         | S_READ   -> (label, [stack_start_reg], 
+                                        [X86UnInstr (x86call, F "read");
+                                         X86BinInstr (x86mov, eax, stack_start_reg)])
+         | S_PUSH n -> (
             let s = allocate stack in
-            (label, s::stack, [X86BinInstr (x86mov, L n, s)])
-         | S_WRITE  -> (label, [], [X86UnInstr (x86push, R 3);
+            match s with
+            | R _ -> (label, s::stack, [X86BinInstr (x86mov, L n, s)])
+            | _   -> (label, s::stack, [X86BinInstr (x86mov, L n, eax);
+                                        X86BinInstr (x86mov, eax, s)]))
+         | S_WRITE  -> (label, [], [X86UnInstr (x86push, stack_start_reg);
                                    X86UnInstr (x86call, F "write");
-                                   X86UnInstr (x86pop, R 3)])
+                                   X86UnInstr (x86pop, stack_start_reg)])
          | S_ST x   ->
             let a::stack' = stack in
-            (label, stack',  [X86BinInstr (x86mov, a, R 0);
-                             X86BinInstr (x86mov, R 0, M x)])
+            (label, stack',  [X86BinInstr (x86mov, a, eax);
+                             X86BinInstr (x86mov, eax, M x)])
          | S_LD x   ->
             let a = allocate stack in
-            (label, a::stack, [X86BinInstr (x86mov, M x, R 0);
-                              X86BinInstr (x86mov, R 0, a)])
+            (label, a::stack, [X86BinInstr (x86mov, M x, eax);
+                              X86BinInstr (x86mov, eax, a)])
          | S_ADD    ->
             let r::l::stack' = stack in
             (label, l::stack', getSimpleArithmCode x86add l r l)
@@ -357,10 +369,10 @@ let x86compile code =
             (label, l::stack', getSimpleArithmCode x86mul l r l)
          | S_DIV    ->
             let r::l::stack' = stack in
-            (label, l::stack', getDivisionCode l r @ [X86BinInstr (x86mov, R 0, l)])
+            (label, l::stack', getDivisionCode l r @ [X86BinInstr (x86mov, eax, l)])
          | S_MOD    ->
             let r::l::stack' = stack in
-            (label, l::stack', getDivisionCode l r @ [X86BinInstr (x86mov, R 1, l)])
+            (label, l::stack', getDivisionCode l r @ [X86BinInstr (x86mov, edx, l)])
          | S_AND     ->
             let r::l::stack' = stack in
             let (label', cmd) = getLogicOpCode x86and l r l label in
@@ -398,7 +410,9 @@ let x86compile code =
        in
        x86code @ (x86compile' label' stack' code')
   in
-  (x86compile' 0 [] code) @ [X86BinInstr (x86mov, L 0, R 0); X860RInstr x86ret]
+  [X86UnInstr (x86push, ebp); X86BinInstr (x86mov, esp, ebp)] 
+  @ (x86compile' 0 [] code)
+  @ [X86UnInstr (x86pop, ebp); X86BinInstr (x86mov, L 0, eax); X860RInstr x86ret]
 
 let x86toStr code =
     let printOpnd op =
