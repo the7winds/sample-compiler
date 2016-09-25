@@ -218,7 +218,7 @@ let compile_stmt stmt =
       | If (e, s) ->
         let ec = compile_expr e in
         let ls = Printf.sprintf "LS%d" lbl in
-        let (sc, lbl') = compile_stmt' stmt (lbl + 1) in
+        let (sc, lbl') = compile_stmt' s (lbl + 1) in
         (ec @ [S_TESTZ; S_JZ ls] @ sc @ [S_LBL ls], lbl')
       | IfElse (e, s1, s2) ->
         let ec = compile_expr e in
