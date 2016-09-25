@@ -77,6 +77,7 @@ type instr =
   | S_JMP   of string
   | S_JZ    of string
   | S_JNZ   of string
+  | S_TESTZ
   | S_ADD
   | S_SUB
   | S_MUL
@@ -218,19 +219,20 @@ let compile_stmt stmt =
         let ec = compile_expr e in
         let ls = Printf.sprintf "LS%d" lbl in
         let (sc, lbl') = compile_stmt' stmt (lbl + 1) in
-        (ec @ [S_JZ ls] @ sc @ [S_LBL ls], lbl')
+        (ec @ [S_TESTZ; S_JZ ls] @ sc @ [S_LBL ls], lbl')
       | IfElse (e, s1, s2) ->
         let ec = compile_expr e in
         let ls = Printf.sprintf "LS%d" lbl in
         let (sc1, lbl1) = compile_stmt' s1 (lbl + 1) in
         let (sc2, lbl2) = compile_stmt' s2 lbl1 in
-        (ec @ [S_JZ ls] @ sc1 @ [S_LBL ls] @ sc2, lbl2)
+        let lf = Printf.sprintf "LS%d" lbl2 in
+        (ec @ [S_TESTZ; S_JZ ls] @ sc1 @ [S_JMP lf] @ [S_LBL ls] @ sc2 @ [S_LBL lf], lbl2 + 1)
       | While (e, s) ->
         let ec  = compile_expr e in
         let ls1 = Printf.sprintf "LS%d" lbl in
         let ls2 = Printf.sprintf "LS%d" (lbl + 1) in
         let (sc, lbl') = compile_stmt' s (lbl + 2) in
-        ([S_LBL ls1] @ ec @ [S_JZ ls2] @ sc @ [S_JMP ls1] @ [S_LBL ls2], lbl')
+        ([S_LBL ls1] @ ec @ [S_TESTZ; S_JZ ls2] @ sc @ [S_JMP ls1] @ [S_LBL ls2], lbl')
    in
    let (code, _) = compile_stmt' stmt 1 in code
 
@@ -284,6 +286,7 @@ let x86call = "call"
 let x86cltd = "cltd"
 let x86push = "push"
 let x86pop  = "pop"
+let x86test = "test"
 
 type x86stmt =
   | X86Label     of opnd
@@ -358,12 +361,15 @@ let x86compile code =
             let a = allocate stack in
             (label, a::stack, [X86BinInstr (x86mov, M x, eax);
                               X86BinInstr (x86mov, eax, a)])
+         | S_TESTZ ->
+            let z::stack' = stack in
+            (label, stack', [X86BinInstr (x86test, z, z)])
          | S_ADD    ->
             let r::l::stack' = stack in
             (label, l::stack', getSimpleArithmCode x86add l r l)
          | S_SUB    ->
             let r::l::stack' = stack in
-            (label, l::stack', getSimpleArithmCode x86sub l r l)
+            (label, l::stack', getSimpleArithmCode x86sub r l l)
          | S_MUL    ->
             let r::l::stack' = stack in
             (label, l::stack', getSimpleArithmCode x86mul l r l)
@@ -458,7 +464,7 @@ let x86toStr code =
     in
     let vars : string list = getVars code
     in
-    String.concat "\n" ([".text"] @ (List.map toVar vars) @ [".global main"; "main:"] @ (List.map printX86Stmt code))
+    String.concat "\n" ([".text"] @ (List.map toVar vars) @ [".global main"; "main:"] @ (List.map printX86Stmt code) @ ["\n"])
 
 let build stmt name =
   let outf = open_out (Printf.sprintf "%s.s" name) in

@@ -3,29 +3,67 @@ open Matcher
 open Expr
 
 ostap (
-    expr: prior2;
+    expr: prior5;
+
+    prior5tail:
+      tail:("||" r:prior4)*
+        { (List.map (fun (op, r) -> ("||", r)) tail) };
+
+    prior5:
+      a:prior4 suf:prior5tail
+        { List.fold_left (fun l (op, r) -> BinOp (op, l, r)) a suf };
+
+    prior4tail:
+      tail:("&&" r:prior3)*
+        { (List.map (fun (op, r) -> ("&&", r)) tail) };
+
+    prior4:
+      a:prior3 suf:prior4tail
+        { List.fold_left (fun l (op, r) -> BinOp (op, l, r)) a suf };
+
+    eq:
+      l:prior2 "==" r:prior2 { BinOp ("==", l, r) };
+    nq:
+      l:prior2 "!=" r:prior2 { BinOp ("!=", l, r) };
+    lq:
+      l:prior2 "<=" r:prior2 { BinOp ("<=", l, r) };
+    gq:
+      l:prior2 ">=" r:prior2 { BinOp (">=", l, r) };
+    lt:
+      l:prior2 "<"  r:prior2 { BinOp ("<", l, r) };
+    gt:
+      l:prior2 ">"  r:prior2 { BinOp (">", l, r) };
+    cmp: eq | nq | lq | gq | lt | gt;
+
+    prior3:
+      cmp
+    | prior2
+    | -"(" a:prior5 -")" { a };
 
     addTail:
       "+" a:prior1 tail:("+" r:prior1)*
-      { ("+", a)::(List.map (fun (op, r) -> ("+", r)) tail) };
+          { ("+", a)::(List.map (fun (op, r) -> ("+", r)) tail) };
     subTail:
       "-" a:prior1 tail:("-" r:prior1)*
-      { ("-", a)::(List.map (fun (op, r) -> ("-", r)) tail) };
+          { ("-", a)::(List.map (fun (op, r) -> ("-", r)) tail) };
     addOrSubTail: addTail | subTail;
     prior2tail:
       tail:(l:addOrSubTail)* { List.concat tail };
 
     prior2:
       l:prior1 suf:prior2tail
-            { List.fold_left (fun l (op, r) -> BinOp (op, l, r)) l suf };
+           { List.fold_left (fun l (op, r) -> BinOp (op, l, r)) l suf };
 
     mulTail:
       "*" a:primary tail:("*" r:primary)*
-            { ("*", a)::(List.map (fun (op, r) -> ("*", r)) tail) };
+           { ("*", a)::(List.map (fun (op, r) -> ("*", r)) tail) };
     divTail:
       "/" a:primary tail:("/" r:primary)*
-            { ("/", a)::(List.map (fun (op, r) -> ("/", r)) tail) };
-    mulOrDivTail: mulTail | divTail;
+           { ("/", a)::(List.map (fun (op, r) -> ("/", r)) tail) };
+    modTail:
+      "%" a:primary tail:("/" r:primary)*
+           { ("%", a)::(List.map (fun (op, r) -> ("%", r)) tail) };
+    mulOrDivTail: mulTail | divTail | modTail;
     prior1tail:
       tail:(l:mulOrDivTail)* { List.concat tail };
 
@@ -36,7 +74,7 @@ ostap (
     primary:
       c:DECIMAL { Const c }
     | x:IDENT   { Var   x }
-    | -"(" expr -")"
+    | -"(" prior2 -")"
 )
 
 ostap (
@@ -50,7 +88,7 @@ ostap (
     | %"skip"                                { Skip               }
     | x:IDENT ":=" e:expr                    { Assign (x , e)     }
     | %"if"    "(" e:expr     ")" "{" s1:stmt "}"
-        "else"                    "{" s2:stmt "}"
+       "else"                     "{" s2:stmt "}"
                                              { IfElse (e, s1, s2) }
     | %"if"    "(" e:expr     ")" "{" s:stmt  "}"
                                              { If (e, s)          }
