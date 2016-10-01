@@ -6,10 +6,26 @@ module Expr =
     let rec eval state = function
     | Const  n -> n
     | Var    x -> state x
-    | Binop  _ -> failwith "not supported"
- 
+    | Binop  (o, l, r) ->
+        let lv = eval state l in
+        let rv = eval state r in
+        match o with
+        | "+" -> lv + rv
+        | "-" -> lv - rv
+        | "*" -> lv * rv
+        | "/" -> lv / rv
+        | "%" -> lv mod rv
+        | "!!" -> if lv != 0 || rv != 0 then 1 else 0
+        | "&&" -> if lv != 0 && rv != 0 then 1 else 0
+        | "==" -> if lv == rv then 1 else 0
+        | "!=" -> if lv != rv then 1 else 0
+        | "<=" -> if lv <= rv then 1 else 0
+        | ">=" -> if lv >= rv then 1 else 0
+        | "<"  -> if lv <  rv then 1 else 0
+        | ">"  -> if lv >  rv then 1 else 0
+
   end
-  
+
 module Stmt =
   struct
 

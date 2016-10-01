@@ -1,4 +1,4 @@
-open Ostap 
+open Ostap
 open Matcher
 
 module Expr =
@@ -10,7 +10,21 @@ module Expr =
     | Binop of string * t * t
 
     ostap (
-      parse:
+      parse: ori;
+
+      ori:
+        l:andi suf:(("!!") cmp)* {
+          List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+        }
+      | ori;
+
+      andi:
+        l:cmp suf:(("&&") cmp)* {
+          List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
+        }
+      | cmp;
+
+      cmp:
         l:addi suf:(("<=" | "<" | "==" | "!=" | ">=" | ">") addi)* {
            List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
         }
