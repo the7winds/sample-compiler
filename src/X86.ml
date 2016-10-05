@@ -59,7 +59,7 @@ class x86env =
     method local_vars = S.elements !local_vars
 
     val    allocated  = ref 0
-    method allocate n = allocated := max n !allocated
+    method allocate n = allocated := max (n+1) !allocated
     method allocated  = !allocated
   end
 
@@ -68,7 +68,7 @@ let allocate env stack =
   | []                              -> R 3
   | (S n)::_                        -> env#allocate (n+1); S (n+1)
   | (R n)::_ when n < num_of_regs-1 -> R (n+1)
-  | _                               -> env#allocate (1); S 0
+  | _                               -> env#allocate 0; S 0
 
 module Show =
   struct
