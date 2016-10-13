@@ -22,30 +22,30 @@ let main = ()
       match Sys.argv.(1) with
       | "-s" -> `SM , Sys.argv.(2)
       | "-o" -> `X86, Sys.argv.(2)
-      | _    -> `Int, Sys.argv.(1)
+      | "-i" -> `Int, Sys.argv.(2)
     in
     match parse filename with
     | `Ok stmt -> 
-	(match mode with
-	 | `X86 ->
+        (match mode with
+         | `X86 ->
              let basename = Filename.chop_suffix filename ".expr" in 
-	     X86.build stmt basename
-	 | _ ->
-	     let rec read acc =
-	       try
-		 let r = read_int () in
-		 Printf.printf "> ";
-		 read (acc @ [r]) 
-               with End_of_file -> acc
-	     in
-	     let input = read [] in
-	     let output =
-	       match mode with
-	       | `SM -> StackMachine.Interpreter.run input (StackMachine.Compile.stmt stmt)
-	       | _   -> Interpreter.Stmt.eval input stmt
-	     in
-	     List.iter (fun i -> Printf.printf "%d\n" i) output
-	)
+             X86.build stmt basename
+         | _ ->
+            let rec read acc =
+            try
+                let r = read_int () in
+                Printf.printf "> ";
+                read (acc @ [r]) 
+                with End_of_file -> acc
+	        in
+            let input = read [] in
+            let output =
+                match mode with
+                | `SM  -> StackMachine.Interpreter.run input (StackMachine.Compile.stmt stmt)
+                | _    -> Interpreter.Stmt.eval input stmt
+            in
+            List.iter (fun i -> Printf.printf "%d\n" i) output
+        )
 
     | `Fail er -> Printf.eprintf "%s" er
   with 

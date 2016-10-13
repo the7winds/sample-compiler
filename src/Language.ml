@@ -13,10 +13,10 @@ module Expr =
       parse: ori;
 
       ori:
-        l:andi suf:(("!!") cmp)* {
+        l:andi suf:(("!!") andi)* {
           List.fold_left (fun l (op, r) -> Binop (Token.repr op, l, r)) l suf
         }
-      | ori;
+      | andi;
 
       andi:
         l:cmp suf:(("&&") cmp)* {
@@ -62,8 +62,9 @@ module Stmt =
 
     ostap (
       parse: s:simple d:(-";" parse)? {
-	match d with None -> s | Some d -> Seq (s, d)
+        match d with None -> s | Some d -> Seq (s, d)
       };
+
       simple:
         x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
       | %"read"  "(" x:IDENT ")"         {Read x}

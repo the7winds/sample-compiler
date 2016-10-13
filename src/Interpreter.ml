@@ -15,14 +15,20 @@ module Expr =
         | "*" -> lv * rv
         | "/" -> lv / rv
         | "%" -> lv mod rv
-        | "!!" -> if lv != 0 || rv != 0 then 1 else 0
-        | "&&" -> if lv != 0 && rv != 0 then 1 else 0
-        | "==" -> if lv == rv then 1 else 0
-        | "!=" -> if lv != rv then 1 else 0
-        | "<=" -> if lv <= rv then 1 else 0
-        | ">=" -> if lv >= rv then 1 else 0
-        | "<"  -> if lv <  rv then 1 else 0
-        | ">"  -> if lv >  rv then 1 else 0
+        | _ -> 
+            let lb = lv <> 0 in
+            let rb = rv <> 0 in
+            let boolToInt b = if b then 1 else 0 in
+            boolToInt (
+                match o with
+                | "!!" -> lb || rb
+                | "&&" -> lb && rb
+                | "!=" -> lv <> rv
+                | "<=" -> lv <= rv
+                | ">=" -> lv >= rv
+                | "==" -> lv =  rv
+                | "<"  -> lv <  rv
+                | ">"  -> lv >  rv)
 
   end
 
@@ -33,15 +39,15 @@ module Stmt =
 
     let eval input stmt =
       let rec eval' ((state, input, output) as c) stmt =
-	let state' x = List.assoc x state in
-	match stmt with
-	| Skip          -> c
-	| Seq    (l, r) -> eval' (eval' c l) r
-	| Assign (x, e) -> ((x, Expr.eval state' e) :: state, input, output)
-	| Write   e     -> (state, input, output @ [Expr.eval state' e])
-	| Read    x     ->
-	    let y::input' = input in
-	    ((x, y) :: state, input', output)
+        let state' x = List.assoc x state in
+        match stmt with
+        | Skip          -> c
+        | Seq    (l, r) -> eval' (eval' c l) r
+        | Assign (x, e) -> ((x, Expr.eval state' e) :: state, input, output)
+        | Write   e     -> (state, input, output @ [Expr.eval state' e])
+        | Read    x     ->
+            let y::input' = input in
+            ((x, y) :: state, input', output)
       in
       let (_, _, result) = eval' ([], input, []) stmt in
       result

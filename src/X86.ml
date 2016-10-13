@@ -63,9 +63,11 @@ class x86env =
     method allocated  = !allocated
   end
 
+let stackStart = 3
+
 let allocate env stack =
   match stack with
-  | []                              -> R 3
+  | []                              -> R stackStart
   | (S n)::_                        -> env#allocate (n+1); S (n+1)
   | (R n)::_ when n < num_of_regs-1 -> R (n+1)
   | _                               -> env#allocate 0; S 0
@@ -89,7 +91,7 @@ module Show =
     | X86Sub (s1, s2) -> Printf.sprintf "\tsubl\t%s,\t%s"  (opnd s1) (opnd s2)
     | X86Cmp (s1, s2) -> Printf.sprintf "\tcmpl\t%s,\t%s"  (opnd s1) (opnd s2)
     | X86Mov (s1, s2) -> Printf.sprintf "\tmovl\t%s,\t%s"  (opnd s1) (opnd s2)
-    | X86Div  s       -> Printf.sprintf "\tidivl\t%s"       (opnd s )
+    | X86Div  s       -> Printf.sprintf "\tidivl\t%s"      (opnd s )
     | X86Push s       -> Printf.sprintf "\tpushl\t%s"      (opnd s )
     | X86Pop  s       -> Printf.sprintf "\tpopl\t%s"       (opnd s )
     | X86Cltd         -> Printf.sprintf "\tcltd"
@@ -119,8 +121,12 @@ module Compile =
         | i::code' ->
             let (stack', x86code) =
               match i with
-              | S_READ   -> ([R 3], [X86Call "read"; X86Mov (eax, R 3)])
-              | S_WRITE  -> ([], [X86Push (R 3); X86Call "write"; X86Pop (R 3)])
+              | S_READ   -> 
+                  let s = allocate env stack in
+                  (s::stack, [X86Call "read"; X86Mov (eax, s)])
+              | S_WRITE  -> 
+                  let s::stack' = stack in
+                  (stack', [X86Mov (s, ebx); X86Push ebx; X86Call "write"; X86Pop ebx])
               | S_PUSH n ->
                   let s = allocate env stack in
                   (s::stack, [X86Mov (L n, s)])
@@ -148,16 +154,22 @@ module Compile =
                              | "+" -> [X86Add (rreg, lreg); X86Mov (lreg, l)]
                              | "-" -> [X86Sub (rreg, lreg); X86Mov (lreg, l)]
                              | "*" -> [X86Mul (rreg, lreg); X86Mov (lreg, l)]
-                             | "/" -> [X86Cltd; X86Div  rreg; X86Mov (eax, l)]
-                             | "%" -> [X86Cltd; X86Div  rreg; X86Mov (edx, l)]
-                             | "<" -> [X86Cmp (rreg, lreg); X86Mov (L 0, eax); X86SetL eax; X86Mov (eax, l)]
-                             | ">" -> [X86Cmp (rreg, lreg); X86Mov (L 0, eax); X86SetG eax; X86Mov (eax, l)]
-                             | "<=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, eax); X86SetLE eax; X86Mov (eax, l)]
-                             | ">=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, eax); X86SetGE eax; X86Mov (eax, l)]
-                             | "==" -> [X86Cmp (rreg, lreg); X86Mov (L 0, eax); X86SetE eax; X86Mov (eax, l)]
-                             | "!=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, eax); X86SetNE eax; X86Mov (eax, l)]
-                             | "&&" -> [X86And (rreg, lreg); X86Mov (L 0, eax); X86SetNZ eax; X86Mov (eax, l)]
-                             | "!!" -> [X86Or (rreg, lreg); X86Mov (L 0, eax); X86SetNZ eax; X86Mov (eax, l)])
+                             | "/" -> [X86Cltd; X86Div rreg; X86Mov (eax, l)]
+                             | "%" -> [X86Cltd; X86Div rreg; X86Mov (edx, l)]
+                             | "<" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetL edx; X86Mov (edx, l)]
+                             | ">" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetG edx; X86Mov (edx, l)]
+                             | "<=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetLE edx; X86Mov (edx, l)]
+                             | ">=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetGE edx; X86Mov (edx, l)]
+                             | "==" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetE edx; X86Mov (edx, l)]
+                             | "!=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetNE edx; X86Mov (edx, l)]
+                             | "&&" -> [X86Cmp (L 0, lreg); X86SetNE lreg; 
+                                        X86Cmp (L 0, rreg); X86SetNE edx; 
+                                        X86And (lreg, edx); X86And (L 1, edx); 
+                                        X86Mov (edx, l)]
+                             | "!!" -> [X86Cmp (L 0, lreg); X86SetNE lreg; 
+                                        X86Cmp (L 0, rreg); X86SetNE edx; 
+                                        X86Or (lreg, edx); X86And (L 1, edx); 
+                                        X86Mov (edx, l)])
             in
             x86code @ compile stack' code'
       in
@@ -202,4 +214,4 @@ let build stmt name =
   let outf = open_out (Printf.sprintf "%s.s" name) in
   Printf.fprintf outf "%s" (compile stmt);
   close_out outf;
-  ignore (Sys.command (Printf.sprintf "gcc -m32 -o %s ../../runtime/runtime.o %s.s" name name))
+  ignore (Sys.command (Printf.sprintf "gcc -m32 -o %s $RC_RUNTIME/runtime.o %s.s" name name))

@@ -38,14 +38,20 @@ module Interpreter =
                   | "*" -> l * r
                   | "/" -> l / r
                   | "%" -> l mod r
-                  | "==" -> if l == r then 1 else 0
-                  | "!=" -> if l != r then 1 else 0
-                  | "<=" -> if l <= r then 1 else 0
-                  | ">=" -> if l >= r then 1 else 0
-                  | "<"  -> if l <  r then 1 else 0
-                  | ">"  -> if l >  r then 1 else 0
-                  | "&&" -> if l != 0 && r != 0 then 1 else 0
-                  | "!!" -> if l != 0 || r != 0 then 1 else 0
+                  | _ -> 
+                      let lb = l <> 0 in
+                      let rb = r <> 0 in
+                      let boolToInt b = if b then 1 else 0 in
+                      boolToInt (
+                          match s with
+                          | "!=" -> l <> r
+                          | "<=" -> l <= r
+                          | ">=" -> l >= r
+                          | "==" -> l =  r
+                          | "<"  -> l <  r
+                          | ">"  -> l >  r
+                          | "&&" -> lb && rb
+                          | "!!" -> lb || rb)
                  )::stack',
                  input,
                  output
