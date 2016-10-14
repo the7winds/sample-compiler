@@ -1,20 +1,20 @@
 type opnd = R of int | S of int | M of string | L of int
 
 let x86regs = [|
-  "%eax"; 
-  "%ebx"; 
-  "%edx"; 
-  "%ecx"; 
-  "%esi"; 
+  "%eax";
+  "%ebx";
+  "%edx";
+  "%ecx";
+  "%esi";
   "%edi"
 |]
 
 let x86regsByte = [|
-  "%al"; 
-  "%bl"; 
-  "%dl"; 
-  "%cl"; 
-  "%sl"; 
+  "%al";
+  "%bl";
+  "%dl";
+  "%cl";
+  "%sl";
   "%dl"
 |]
 
@@ -48,6 +48,9 @@ type instr =
 | X86Or    of opnd * opnd
 | X86Ret
 | X86Cltd
+| X86Lbl   of string
+| X86Jmp   of string
+| X86Jz    of string
 | X86Call  of string
 
 module S = Set.Make (String)
@@ -105,7 +108,10 @@ module Show =
     | X86And (s1, s2) -> Printf.sprintf "\tandl\t%s,\t%s"  (opnd s1) (opnd s2)
     | X86Or  (s1, s2) -> Printf.sprintf "\torl\t%s,\t%s"   (opnd s1) (opnd s2)
     | X86Ret          -> "\tret"
-    | X86Call p       -> Printf.sprintf "\tcall\t%s" p
+    | X86Lbl  s       -> Printf.sprintf "%s:"           s
+    | X86Jmp  s       -> Printf.sprintf "\tjmp\t%s"     s
+    | X86Jz   s       -> Printf.sprintf "\tjz\t%s"      s
+    | X86Call p       -> Printf.sprintf "\tcall\t%s"    p
 
   end
 
@@ -121,10 +127,10 @@ module Compile =
         | i::code' ->
             let (stack', x86code) =
               match i with
-              | S_READ   -> 
+              | S_READ   ->
                   let s = allocate env stack in
                   (s::stack, [X86Call "read"; X86Mov (eax, s)])
-              | S_WRITE  -> 
+              | S_WRITE  ->
                   let s::stack' = stack in
                   (stack', [X86Mov (s, ebx); X86Push ebx; X86Call "write"; X86Pop ebx])
               | S_PUSH n ->
@@ -133,7 +139,7 @@ module Compile =
               | S_LD x   ->
                   env#local x;
                   let s = allocate env stack in
-                  (s::stack, 
+                  (s::stack,
                   match s with
                   | R _ -> [X86Mov (M x, s)]
                   | _   -> [X86Mov (M x, eax); X86Mov (eax, s)])
@@ -162,14 +168,25 @@ module Compile =
                              | ">=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetGE edx; X86Mov (edx, l)]
                              | "==" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetE edx; X86Mov (edx, l)]
                              | "!=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetNE edx; X86Mov (edx, l)]
-                             | "&&" -> [X86Cmp (L 0, lreg); X86SetNE lreg; 
-                                        X86Cmp (L 0, rreg); X86SetNE edx; 
-                                        X86And (lreg, edx); X86And (L 1, edx); 
+                             | "&&" -> [X86Cmp (L 0, lreg); X86SetNE lreg;
+                                        X86Cmp (L 0, rreg); X86SetNE edx;
+                                        X86And (lreg, edx); X86And (L 1, edx);
                                         X86Mov (edx, l)]
-                             | "!!" -> [X86Cmp (L 0, lreg); X86SetNE lreg; 
-                                        X86Cmp (L 0, rreg); X86SetNE edx; 
-                                        X86Or (lreg, edx); X86And (L 1, edx); 
+                             | "!!" -> [X86Cmp (L 0, lreg); X86SetNE lreg;
+                                        X86Cmp (L 0, rreg); X86SetNE edx;
+                                        X86Or (lreg, edx); X86And (L 1, edx);
                                         X86Mov (edx, l)])
+              | S_LBL s -> (stack, [X86Lbl s])
+              | S_JMP s -> (stack, [X86Jmp s])
+              | S_CJMP (c, s) ->
+                    let a::stack' = stack in
+                    (stack',
+                     (match a with
+                     | R _ -> [X86Cmp (L 0, a)]
+                     | _   -> [X86Mov (a, eax); X86Cmp (L 0, eax)]) @
+                     (match c with
+                     | "Z" -> [X86Jz s]
+                     | _   -> failwith "BAD CONDITION x86"))
             in
             x86code @ compile stack' code'
       in

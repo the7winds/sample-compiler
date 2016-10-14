@@ -76,7 +76,7 @@ module Compile =
 
     let stmt s =
         let rec stmt' s lbl =
-            let getLblName lbl = Printf.sprintf "CL %d" lbl in
+            let getLblName lbl = Printf.sprintf "CL%d" lbl in
             match s with
             | Skip          -> ([],                 lbl)
             | Assign (x, e) -> (expr e @ [S_ST x],  lbl)
