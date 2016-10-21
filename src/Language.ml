@@ -59,7 +59,6 @@ module Stmt =
     | Write  of Expr.t
     | Assign of string * Expr.t
     | Seq    of t * t
-    | If     of Expr.t * t
     | IfElse of Expr.t * t * t
     | While  of Expr.t * t
 
@@ -73,17 +72,42 @@ module Stmt =
       | %"read"  "(" x:IDENT ")"         {Read x}
       | %"write" "(" e:!(Expr.parse) ")" {Write e}
       | %"skip"                          {Skip}
-      | %"if"    e:!(Expr.parse) "then"
+      | %"if"    e:!(Expr.parse) %"then"
                  s:parse
-         "fi"                            {If (e, s)}
-      | %"if"    e:!(Expr.parse) "then"
+        %"fi"                            {IfElse (e, s, Skip)}
+      | %"if"    e:!(Expr.parse) %"then"
                  s1:parse
-         "else"
+        %"else"
                  s2:parse
-         "fi"                            {IfElse (e, s1, s2)}
-      | %"while" e:!(Expr.parse) "do"
+        %"fi"                            {IfElse (e, s1, s2)}
+      | %"while" e:!(Expr.parse) %"do"
                  s:parse
-         "od"                            {While (e, s)}
+        %"od"                            {While (e, s)}
+      | %"if"    e1:!(Expr.parse) %"then"
+                 s1:parse
+         "{"
+            suf:( %"elif" !(Expr.parse)
+                  %"then" parse )*
+         "}"                             
+	{IfElse (e1, s1, List.fold_right (fun (e, t) r -> IfElse (e, t, r)) suf Skip)}
+	
+      | %"if"    e1:!(Expr.parse) %"then"
+                 s1:parse
+         "{"
+            suf:( %"elif" !(Expr.parse)
+                  %"then" parse )*
+	
+         "}"
+	%"else" es:parse
+	{IfElse (e1, s1, List.fold_right (fun (e, t) r -> IfElse (e, t, r)) suf es)}
+
+      | %"repeat" s:parse
+        %"until" e:!(Expr.parse)         {Seq (s, While (Binop ("==", Const 0, e), s))}
+      | %"for" s1:parse "," e:!(Expr.parse) "," s2:parse
+        %"do"
+               s:parse
+        %"od"
+                                         {Seq (s1, While (e, Seq(s, s2)))}
     )
 
   end

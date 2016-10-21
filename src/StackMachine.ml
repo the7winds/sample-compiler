@@ -86,15 +86,12 @@ module Compile =
                 let (code1, lbl1) = stmt' l lbl in
                 let (code2, lbl2) = stmt' r lbl1 in
                     (code1 @ code2, lbl2)
-            | If     (e, s) -> 
-                let lblEnd = getLblName lbl in
-                let (st, lbl') = stmt' s (lbl+1) in
-                (expr e @ [S_CJMP ("Z", lblEnd)] @ st @ [S_LBL lblEnd], lbl')
             | IfElse (e, s1, s2) ->
                 let lblElse = getLblName lbl in
-                let (st1, lbl1) = stmt' s1 (lbl+1) in
-                let (st2, lbl2) = stmt' s2 (lbl1) in
-                (expr e @ [S_CJMP ("Z", lblElse)] @ st1 @ [S_LBL lblElse] @ st2, lbl2)
+		let lblEnd = getLblName (lbl+1) in
+                let (st1, lbl1) = stmt' s1 (lbl+2) in
+                let (st2, lbl2) = stmt' s2 lbl1 in
+                (expr e @ [S_CJMP ("Z", lblElse)] @ st1 @ [S_JMP lblEnd; S_LBL lblElse] @ st2 @ [S_LBL lblEnd], lbl2)
             | While (e, s) ->
                 let lblCnd = getLblName lbl in
                 let lblEnd = getLblName (lbl+1) in

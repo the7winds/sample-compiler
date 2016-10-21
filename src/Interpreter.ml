@@ -51,7 +51,6 @@ module Stmt =
         | Read    x     ->
             let y::input' = input in
             ((x, y) :: state, input', output)
-        | If     (e, s)      -> if Expr.eval state' e <> 0 then eval' c s else c
         | IfElse (e, s1, s2) -> if Expr.eval state' e <> 0 then eval' c s1 
                                                            else eval' c s2
         | While (e, s) ->
