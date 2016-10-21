@@ -72,35 +72,21 @@ module Stmt =
       | %"read"  "(" x:IDENT ")"         {Read x}
       | %"write" "(" e:!(Expr.parse) ")" {Write e}
       | %"skip"                          {Skip}
-      | %"if"    e:!(Expr.parse) %"then"
-                 s:parse
-        %"fi"                            {IfElse (e, s, Skip)}
-      | %"if"    e:!(Expr.parse) %"then"
-                 s1:parse
-        %"else"
-                 s2:parse
-        %"fi"                            {IfElse (e, s1, s2)}
       | %"while" e:!(Expr.parse) %"do"
                  s:parse
         %"od"                            {While (e, s)}
-      | %"if"    e1:!(Expr.parse) %"then"
-                 s1:parse
-         "{"
+      | %"if"    e:!(Expr.parse) %"then"
+                 s:parse
             suf:( %"elif" !(Expr.parse)
                   %"then" parse )*
-         "}"                             
-	{IfElse (e1, s1, List.fold_right (fun (e, t) r -> IfElse (e, t, r)) suf Skip)}
-	
-      | %"if"    e1:!(Expr.parse) %"then"
-                 s1:parse
-         "{"
-            suf:( %"elif" !(Expr.parse)
-                  %"then" parse )*
-	
-         "}"
-	%"else" es:parse
-	{IfElse (e1, s1, List.fold_right (fun (e, t) r -> IfElse (e, t, r)) suf es)}
-
+        es:(%"else" parse)?
+	%"fi"
+        {IfElse (e, s, List.fold_right
+                           (fun (e, t) r -> IfElse (e, t, r)) 
+                           suf
+                           (match es with
+                            | Some e -> e
+                            | _ -> Skip))}
       | %"repeat" s:parse
         %"until" e:!(Expr.parse)         {Seq (s, While (Binop ("==", Const 0, e), s))}
       | %"for" s1:parse "," e:!(Expr.parse) "," s2:parse
