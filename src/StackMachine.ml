@@ -1,6 +1,7 @@
 type i =
 | S_READ
 | S_WRITE
+| S_POP
 | S_PUSH  of int
 | S_LD    of string
 | S_ST    of string
@@ -8,6 +9,10 @@ type i =
 | S_LBL   of string
 | S_JMP   of string
 | S_CJMP  of string * string
+| S_CALL  of string
+| S_END
+| S_FUN   of string * (string list)
+| S_RET
 
 
 module Interpreter =
@@ -17,49 +22,73 @@ module Interpreter =
 
     let run input code =
       let rec run' (state, stack, input, output) code total =
+          (*Printf.printf "STATE SZ %d\n" (List.length state);*)
        match code with
-       | []       -> output
+       | []       -> (0, input, output)
        | i::code' ->
-           let (context, code'') = 
-              let rec getLblCode s code =
-                  match code with
-                  | []               -> failwith (Printf.sprintf "WHERE IS NO LABEL %s" s)
-                  | (S_LBL x)::code' -> if x = s then code' else getLblCode s code'
-                  | _::code'         -> getLblCode s code'
-              in
-              (match i with
-              | S_READ ->
-                let y::input' = input in
-                ((state, y::stack, input', output), code')
-              | S_WRITE ->
-                let y::stack' = stack in
-                ((state, stack', input, output @ [y]), code')
-              | S_PUSH n ->
-                ((state, n::stack, input, output), code')
-              | S_LD x ->
-                ((state, (List.assoc x state)::stack, input, output), code')
-              | S_ST x ->
-                let y::stack' = stack in
-                (((x, y)::state, stack', input, output), code')
-              | S_BINOP s ->
-                let r::l::stack' = stack in
-                ((state, (Interpreter.Expr.evalBinOp s l r)::stack', input, output), code')
-              | S_LBL s -> ((state, stack, input, output), code')
-              | S_JMP s ->
-                ((state, stack, input, output), getLblCode s total)
-              | S_CJMP (c, s) ->
-                let a::stack' = stack in
-                ((state, stack', input, output), 
-                    if (match c with
-                        | "NZ" -> a <> 0
-                        | "Z"  -> a =  0 
-                        | _    -> failwith "BAD CONDITION") then getLblCode s total 
-                                                            else code')
-              )
-           in
-           run' context code'' total
+            if i = S_RET
+            then let s::stack' = stack in (s, input, output)
+            else
+               let (context, code'') =
+                  let rec getLblCode s code =
+                      match code with
+                      | []                    -> failwith (Printf.sprintf "WHERE IS NO LABEL %s" s)
+                      | (S_LBL x)::code'      -> if x = s then code else getLblCode s code'
+                      | (S_FUN (x, _))::code' -> if x = s then code else getLblCode s code'
+                      | _::code'              -> getLblCode s code'
+                  in
+                  (match i with
+                  | S_READ ->
+                    let y::input' = input in
+                    ((state, y::stack, input', output), code')
+                  | S_WRITE ->
+                    let y::stack' = stack in
+                    ((state, stack', input, output @ [y]), code')
+                  | S_PUSH n ->
+                    ((state, n::stack, input, output), code')
+                  | S_POP ->
+                    let s::stack' = stack in
+                    ((state, stack', input, output), code')
+                  | S_LD x ->
+                    (*Printf.printf "HERE! %s\n" x;*)
+                    ((state, (List.assoc x state)::stack, input, output), code')
+                  | S_ST x ->
+                    let y::stack' = stack in
+                    (((x, y)::state, stack', input, output), code')
+                  | S_BINOP s ->
+                    let r::l::stack' = stack in
+                    ((state, (Interpreter.Expr.evalBinOp s l r)::stack', input, output), code')
+                  | S_LBL s ->
+                    ((state, stack, input, output), code')
+                  | S_JMP s ->
+                    ((state, stack, input, output), getLblCode s total)
+                  | S_CJMP (c, s) ->
+                    let a::stack' = stack in
+                    ((state, stack', input, output),
+                        if (match c with
+                            | "NZ" -> a <> 0
+                            | "Z"  -> a =  0
+                            | _    -> failwith "BAD CONDITION") then getLblCode s total
+                                                                else code')
+                  | S_FUN (s, a) ->
+                    (*Printf.printf "ARGS: %s\n" (String.concat " " a);*)
+                    let rec prepareState stack ar =
+                        match ar with
+                        | []     -> []
+                        | a::ar' -> let x::stack' = stack in
+                                    (a, x)::prepareState stack' ar'
+                    in
+                    ((prepareState stack a, stack, input, output), code')
+                  | S_CALL s ->
+                    (*Printf.printf "CALL %s" s;*)
+                    let fcode = getLblCode s total in
+                    let (r, i, o) = run' ([], stack, input, output) fcode total in
+                    ((("?", r)::state, stack, i, o), code')
+                  )
+               in
+               run' context code'' total
       in
-      run' ([], [], input, []) code code
+      let (_, _, o) = run' ([], [], input, []) code code in o
 
   end
 
@@ -73,6 +102,8 @@ module Compile =
     | Var   x -> [S_LD   x]
     | Const n -> [S_PUSH n]
     | Binop (s, x, y) -> expr x @ expr y @ [S_BINOP s]
+    | Call (f, a)     -> (List.concat @@ List.rev @@ List.map expr a) @ [S_CALL f] @ (List.map (fun x -> S_POP) a) @ [S_LD "?"]
+
 
     let stmt s =
         let rec stmt' s lbl =
@@ -82,13 +113,13 @@ module Compile =
             | Assign (x, e) -> (expr e @ [S_ST x],  lbl)
             | Read    x     -> ([S_READ; S_ST x],   lbl)
             | Write   e     -> (expr e @ [S_WRITE], lbl)
-            | Seq    (l, r) -> 
+            | Seq    (l, r) ->
                 let (code1, lbl1) = stmt' l lbl in
                 let (code2, lbl2) = stmt' r lbl1 in
-                    (code1 @ code2, lbl2)
+                (code1 @ code2, lbl2)
             | IfElse (e, s1, s2) ->
                 let lblElse = getLblName lbl in
-		let lblEnd = getLblName (lbl+1) in
+                let lblEnd = getLblName (lbl+1) in
                 let (st1, lbl1) = stmt' s1 (lbl+2) in
                 let (st2, lbl2) = stmt' s2 lbl1 in
                 (expr e @ [S_CJMP ("Z", lblElse)] @ st1 @ [S_JMP lblEnd; S_LBL lblElse] @ st2 @ [S_LBL lblEnd], lbl2)
@@ -97,7 +128,32 @@ module Compile =
                 let lblEnd = getLblName (lbl+1) in
                 let (st, lbl') = stmt' s (lbl+2) in
                 ([S_LBL lblCnd] @ expr e @ [S_CJMP ("Z", lblEnd)] @ st @ [S_JMP lblCnd] @ [S_LBL lblEnd], lbl')
+            | FunDcl (f, a, s) ->
+                let (fc, lbl') = stmt' s lbl in
+                ([S_FUN (f, a)] @ fc, lbl')
+            | Return e ->
+                (expr e @ [S_RET], lbl)
+            | ExprSt e ->
+                (expr e @ [S_POP], lbl)
         in
-        let (code, _) = stmt' s 0 in code
+        let (code, _) = stmt' s 0 in
+        (*Printf.printf "%s\n" (String.concat "\n" @@ List.map
+            (fun x -> match x with
+                      | S_READ          -> "READ"
+                      | S_WRITE         -> "WRITE"
+                      | S_POP           -> "POP"
+                      | S_PUSH x        -> Printf.sprintf "PUSH %d" x
+                      | S_LD s          -> Printf.sprintf "LD %s" s
+                      | S_ST s          -> Printf.sprintf "SST %s" s
+                      | S_BINOP s       -> Printf.sprintf "BINOP %s" s
+                      | S_LBL s         -> Printf.sprintf "LABEL %s" s
+                      | S_JMP s         -> Printf.sprintf "JMP %s" s
+                      | S_CJMP (c, s)   -> Printf.sprintf "CJMP %s %s" c s
+                      | S_CALL s        -> Printf.sprintf "CALL %s" s
+                      | S_END           -> "END"
+                      | S_FUN (s, a)    -> Printf.sprintf "FUN: %s ARGS: %s" s (String.concat " " a)
+                      | S_RET           -> "RET"
+        ) code); *)
+        [S_JMP "main"] @ code
 
   end
