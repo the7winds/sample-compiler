@@ -1,3 +1,5 @@
+exception RetVal of int * (int list) * (int list)
+
 module Expr =
   struct
 
@@ -41,7 +43,8 @@ module Expr =
                        (v::t, i', o')
         in
         let (args, input', output') = getArgs a input output in
-        eval_fun_call funs f args input' output'
+        try eval_fun_call funs f args input' output' with
+        | RetVal (v, i, o) -> (v, i, o)
   end
 
 module Stmt =
@@ -86,7 +89,8 @@ module Stmt =
             (state, (f, (a, s))::funs, input, output)
       | Return (e)       ->
             let (v, input', output') = Expr.eval state' funs eval_fun_call input output e in
-            (("?", v)::state, funs, input', output)
+            (*(("?", v)::state, funs, input', output')*)
+            raise (RetVal (v, input', output'))
       | ExprSt e         ->
             (*Printf.printf "HELLO expr st\n";*)
             let (v, input', output') = Expr.eval state' funs eval_fun_call input output e in
