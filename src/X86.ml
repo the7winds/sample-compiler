@@ -176,7 +176,7 @@ module Compile =
                   match s with
                   | R _ -> [X86Mov (s, M x)]
                   | _   -> [X86Mov (s, eax); X86Mov (eax, M x)])
-              | S_BINOP op -> (*failwith "x86 binop"*)
+              | S_BINOP op ->
                   let r::l::stack' = stack in
                   (l::stack',
                         let getBinop lreg =
@@ -231,6 +231,10 @@ module Compile =
               | S_CALL f ->
                     let a = allocate env stack in
                     (a::stack, [X86Call f; X86Mov (eax, a)])
+              | S_RSAVE ->
+                    (stack, [X86Push ecx; X86Push esi; X86Push edi])
+              | S_RRESTORE ->
+                    (stack, [X86Pop edi; X86Pop esi; X86Pop ecx])
             in
             x86code @ compile stack' code'
       in

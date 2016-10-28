@@ -15,6 +15,8 @@ type i =
 | S_END
 | S_FUN   of string * (string list)
 | S_RET
+| S_RSAVE
+| S_RRESTORE
 
 
 module Interpreter =
@@ -49,6 +51,10 @@ module Interpreter =
                   | S_PUSH n ->
                     ((state, n::stack, input, output), code')
                   | S_SPUSH ->
+                    ((state, stack, input, output), code')
+                  | S_RRESTORE ->
+                    ((state, stack, input, output), code')
+                  | S_RSAVE ->
                     ((state, stack, input, output), code')
                   | S_POP ->
                     let s::stack' = stack in
