@@ -4,6 +4,8 @@ let x86regs = [|
   "%eax";
   "%ebx";
   "%edx";
+  "%ebp";
+  "%esp";
   "%ecx";
   "%esi";
   "%edi"
@@ -23,10 +25,12 @@ let word_size = 4
 
 let eax = R 0
 let ebx = R 1
-let ecx = R 3
 let edx = R 2
-let esi = R 4
-let edi = R 5
+let ebp = R 3
+let esp = R 4
+let ecx = R 5
+let esi = R 6
+let edi = R 7
 
 type instr =
 | X86Add   of opnd * opnd
@@ -53,65 +57,79 @@ type instr =
 | X86Jz    of string
 | X86Call  of string
 
-module S = Set.Make (String)
+module M = Map.Make (String)
 
 class x86env =
   object(self)
-    val    local_vars = ref S.empty
-    method local x    = local_vars := S.add x !local_vars
-    method local_vars = S.elements !local_vars
+    val    local_vars = ref M.empty
+    val    local_cnt  = ref 0
+    val    args       = ref M.empty
+    val    args_cnt   = ref 1
+    
+    method local x    = if not (M.mem x !local_vars) && not (M.mem x !args)
+                        then local_vars := M.add x (!local_cnt + 1) !local_vars;
+                             local_cnt := !local_cnt + 1;
+    method local_n    = !local_cnt
+
+    method arg x      = if not (M.mem x !local_vars) && not (M.mem x !args)
+                        then args := M.add x (!args_cnt + 1) !args;
+                             args_cnt := !args_cnt + 1
+    
+    method get_shift x = word_size * (if M.mem x !args then M.find x !args
+                                          else -(M.find x !local_vars))
 
     val    allocated  = ref 0
-    method allocate n = allocated := max (n+1) !allocated
+    method allocate n = allocated := max n !allocated
     method allocated  = !allocated
   end
 
-let stackStart = 3
+let stackStart = 5
 
 let allocate env stack =
   match stack with
   | []                              -> R stackStart
   | (S n)::_                        -> env#allocate (n+1); S (n+1)
   | (R n)::_ when n < num_of_regs-1 -> R (n+1)
-  | _                               -> env#allocate 0; S 0
+  | _                               -> env#allocate 1; S 1
 
 module Show =
   struct
 
-    let opnd = function
-    | R i -> x86regs.(i)
-    | S i -> Printf.sprintf "-%d(%%ebp)" (i * word_size)
-    | M x -> x
-    | L i -> Printf.sprintf "$%d" i
-
-    let opndByte = function
-    | R i -> x86regsByte.(i)
-    | op  -> opnd op
-
-    let instr = function
-    | X86Add (s1, s2) -> Printf.sprintf "\taddl\t%s,\t%s"  (opnd s1) (opnd s2)
-    | X86Mul (s1, s2) -> Printf.sprintf "\timull\t%s,\t%s" (opnd s1) (opnd s2)
-    | X86Sub (s1, s2) -> Printf.sprintf "\tsubl\t%s,\t%s"  (opnd s1) (opnd s2)
-    | X86Cmp (s1, s2) -> Printf.sprintf "\tcmpl\t%s,\t%s"  (opnd s1) (opnd s2)
-    | X86Mov (s1, s2) -> Printf.sprintf "\tmovl\t%s,\t%s"  (opnd s1) (opnd s2)
-    | X86Div  s       -> Printf.sprintf "\tidivl\t%s"      (opnd s )
-    | X86Push s       -> Printf.sprintf "\tpushl\t%s"      (opnd s )
-    | X86Pop  s       -> Printf.sprintf "\tpopl\t%s"       (opnd s )
-    | X86Cltd         -> Printf.sprintf "\tcltd"
-    | X86SetL  s      -> Printf.sprintf "\tsetl\t%s"       (opndByte s)
-    | X86SetG  s      -> Printf.sprintf "\tsetg\t%s"       (opndByte s)
-    | X86SetLE s      -> Printf.sprintf "\tsetle\t%s"      (opndByte s)
-    | X86SetGE s      -> Printf.sprintf "\tsetge\t%s"      (opndByte s)
-    | X86SetE  s      -> Printf.sprintf "\tsete\t%s"       (opndByte s)
-    | X86SetNE s      -> Printf.sprintf "\tsetne\t%s"      (opndByte s)
-    | X86SetNZ s      -> Printf.sprintf "\tsetnz\t%s"      (opndByte s)
-    | X86And (s1, s2) -> Printf.sprintf "\tandl\t%s,\t%s"  (opnd s1) (opnd s2)
-    | X86Or  (s1, s2) -> Printf.sprintf "\torl\t%s,\t%s"   (opnd s1) (opnd s2)
-    | X86Ret          -> "\tret"
-    | X86Lbl  s       -> Printf.sprintf "%s:"           s
-    | X86Jmp  s       -> Printf.sprintf "\tjmp\t%s"     s
-    | X86Jz   s       -> Printf.sprintf "\tjz\t%s"      s
-    | X86Call p       -> Printf.sprintf "\tcall\t%s"    p
+    let instr env = 
+        let opnd = function
+        | R i -> x86regs.(i)
+        | S i -> Printf.sprintf "-%d(%%ebp)" ((env#local_n + i) * word_size)
+        | M x -> Printf.sprintf "%d(%%ebp)" (env#get_shift x)
+        | L i -> Printf.sprintf "$%d" i
+        in
+        let opndByte = function
+        | R i -> x86regsByte.(i)
+        | op  -> opnd op
+        in
+        function
+        | X86Add (s1, s2) -> Printf.sprintf "\taddl\t%s,\t%s"  (opnd s1) (opnd s2)
+        | X86Mul (s1, s2) -> Printf.sprintf "\timull\t%s,\t%s" (opnd s1) (opnd s2)
+        | X86Sub (s1, s2) -> Printf.sprintf "\tsubl\t%s,\t%s"  (opnd s1) (opnd s2)
+        | X86Cmp (s1, s2) -> Printf.sprintf "\tcmpl\t%s,\t%s"  (opnd s1) (opnd s2)
+        | X86Mov (s1, s2) -> Printf.sprintf "\tmovl\t%s,\t%s"  (opnd s1) (opnd s2)
+        | X86Div  s       -> Printf.sprintf "\tidivl\t%s"      (opnd s )
+        | X86Push s       -> Printf.sprintf "\tpushl\t%s"      (opnd s )
+        | X86Pop  s       -> Printf.sprintf "\tpopl\t%s"       (opnd s )
+        | X86Cltd         -> Printf.sprintf "\tcltd"
+        | X86SetL  s      -> Printf.sprintf "\tsetl\t%s"       (opndByte s)
+        | X86SetG  s      -> Printf.sprintf "\tsetg\t%s"       (opndByte s)
+        | X86SetLE s      -> Printf.sprintf "\tsetle\t%s"      (opndByte s)
+        | X86SetGE s      -> Printf.sprintf "\tsetge\t%s"      (opndByte s)
+        | X86SetE  s      -> Printf.sprintf "\tsete\t%s"       (opndByte s)
+        | X86SetNE s      -> Printf.sprintf "\tsetne\t%s"      (opndByte s)
+        | X86SetNZ s      -> Printf.sprintf "\tsetnz\t%s"      (opndByte s)
+        | X86And (s1, s2) -> Printf.sprintf "\tandl\t%s,\t%s"  (opnd s1) (opnd s2)
+        | X86Or  (s1, s2) -> Printf.sprintf "\torl\t%s,\t%s"   (opnd s1) (opnd s2)
+        | X86Ret          -> "\tret"
+        | X86Lbl  s       -> Printf.sprintf "%s:"           s
+        | X86Jmp  s       -> Printf.sprintf "\tjmp\t%s"     s
+        | X86Jz   s       -> Printf.sprintf "\tjz\t%s"      s
+        | X86Call p       -> Printf.sprintf "\tcall\t%s"    p
 
   end
 
@@ -136,6 +154,14 @@ module Compile =
               | S_PUSH n ->
                   let s = allocate env stack in
                   (s::stack, [X86Mov (L n, s)])
+              | S_SPUSH ->
+                  let s::stack' = stack in
+                  (stack', [X86Mov (s, eax); X86Push eax])
+              | S_SPOP ->
+                  (stack, [X86Pop eax])
+              | S_POP ->
+                  let a::stack' = stack in
+                  (stack', [X86Mov (a, eax)])
               | S_LD x   ->
                   env#local x;
                   let s = allocate env stack in
@@ -178,7 +204,7 @@ module Compile =
                                         X86Mov (edx, l)])
               | S_LBL s -> (stack, [X86Lbl s])
               | S_JMP s -> (stack, [X86Jmp s])
-              | S_CJMP (c, s) ->
+              | S_CJMP (c, s) -> (
                     let a::stack' = stack in
                     (stack',
                      (match a with
@@ -187,6 +213,16 @@ module Compile =
                      (match c with
                      | "Z" -> [X86Jz s]
                      | _   -> failwith "BAD CONDITION x86"))
+              )
+              | S_RET   ->
+                    let a::stack' = stack in
+                    (stack', [X86Mov (a, eax); X86Mov (ebp, esp); X86Pop ebp; X86Ret])
+              | S_FUN (f, a) -> 
+                      List.iter (fun x -> env#arg x) a;
+                      (stack, [X86Lbl f])
+              | S_CALL f ->
+                    let a = allocate env stack in
+                    (a::stack, [X86Call f; X86Mov (eax, a)])
             in
             x86code @ compile stack' code'
       in
@@ -195,36 +231,27 @@ module Compile =
   end
 
 let compile stmt =
-  let env = new x86env in
-  let code = Compile.stack_program env @@ StackMachine.Compile.stmt stmt in
+  let codes = List.map 
+                    (fun sp -> let env = new x86env in
+                               let p = Compile.stack_program env sp in 
+                               (env, p))
+                    @@ StackMachine.Compile.stmt stmt in
   let asm  = Buffer.create 1024 in
   let (!!) s = Buffer.add_string asm s in
   let (!)  s = !!s; !!"\n" in
   !"\t.text";
-  List.iter (fun x ->
-      !(Printf.sprintf "\t.comm\t%s,\t%d,\t%d" x word_size word_size))
-    env#local_vars;
   !"\t.globl\tmain";
-  let prologue, epilogue =
-    if env#allocated = 0
-    then (fun () -> ()), (fun () -> ())
-    else
-      (fun () ->
+  let prologue env =
          !"\tpushl\t%ebp";
          !"\tmovl\t%esp,\t%ebp";
-         !(Printf.sprintf "\tsubl\t$%d,\t%%esp" (env#allocated * word_size))
-      ),
-      (fun () ->
-         !"\tmovl\t%ebp,\t%esp";
-         !"\tpopl\t%ebp"
-      )
+         !(Printf.sprintf "\tsubl\t$%d,\t%%esp" ((env#local_n + env#allocated) * word_size))
   in
-  !"main:";
-  prologue();
-  List.iter (fun i -> !(Show.instr i)) code;
-  epilogue();
-  !"\txorl\t%eax,\t%eax";
-  !"\tret";
+ 
+  List.iter (fun (env, code) ->
+      !(Show.instr env @@ List.hd code);
+      prologue env;
+      List.iter (fun i -> !(Show.instr env i)) @@ List.tl code;
+  ) codes;
   Buffer.contents asm
 
 let build stmt name =

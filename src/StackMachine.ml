@@ -2,7 +2,9 @@ type i =
 | S_READ
 | S_WRITE
 | S_POP
+| S_SPOP
 | S_PUSH  of int
+| S_SPUSH
 | S_LD    of string
 | S_ST    of string
 | S_BINOP of string
@@ -21,7 +23,7 @@ module Interpreter =
     open Interpreter.Expr
 
     let run input code =
-      let rec run' (state, stack, input, output) code total =
+      let rec run' (state, stack, input, output) code total fun_list =
           (*Printf.printf "STATE SZ %d\n" (List.length state);*)
        match code with
        | []       -> (0, input, output)
@@ -32,10 +34,10 @@ module Interpreter =
                let (context, code'') =
                   let rec getLblCode s code =
                       match code with
-                      | []                    -> failwith (Printf.sprintf "WHERE IS NO LABEL %s" s)
-                      | (S_LBL x)::code'      -> if x = s then code else getLblCode s code'
-                      | (S_FUN (x, _))::code' -> if x = s then code else getLblCode s code'
-                      | _::code'              -> getLblCode s code'
+                      | []               -> failwith (Printf.sprintf "WHERE IS NO LABEL %s" s)
+                      | (S_LBL x)::code'
+                            when x = s   -> code
+                      | _::code'         -> getLblCode s code'
                   in
                   (match i with
                   | S_READ ->
@@ -46,9 +48,14 @@ module Interpreter =
                     ((state, stack', input, output @ [y]), code')
                   | S_PUSH n ->
                     ((state, n::stack, input, output), code')
+                  | S_SPUSH ->
+                    ((state, stack, input, output), code')
                   | S_POP ->
                     let s::stack' = stack in
                     ((state, stack', input, output), code')
+                  | S_SPOP ->
+                    let r::_::stack' = stack in
+                    ((state, r::stack', input, output), code')
                   | S_LD x ->
                     (*Printf.printf "HERE! %s\n" x;*)
                     ((state, (List.assoc x state)::stack, input, output), code')
@@ -81,14 +88,15 @@ module Interpreter =
                     ((prepareState stack a, stack, input, output), code')
                   | S_CALL s ->
                     (*Printf.printf "CALL %s" s;*)
-                    let fcode = getLblCode s total in
-                    let (r, i, o) = run' ([], stack, input, output) fcode total in
-                    ((("?", r)::state, stack, i, o), code')
+                    let ((S_FUN (f, _))::_ as fcode) = List.find (fun ((S_FUN (f, _)::_)) -> f = s) fun_list in
+                    let (r, i, o) = run' ([], stack, input, output) fcode total fun_list in
+                    ((state, r::stack, i, o), code')
                   )
                in
-               run' context code'' total
+               run' context code'' total fun_list
       in
-      let (_, _, o) = run' ([], [], input, []) code code in o
+      let main_code = List.hd @@ List.rev code in
+      let (_, _, o) = run' ([], [], input, []) main_code main_code code in o
 
   end
 
@@ -102,7 +110,10 @@ module Compile =
     | Var   x -> [S_LD   x]
     | Const n -> [S_PUSH n]
     | Binop (s, x, y) -> expr x @ expr y @ [S_BINOP s]
-    | Call (f, a)     -> (List.concat @@ List.rev @@ List.map expr a) @ [S_CALL f] @ (List.map (fun x -> S_POP) a) @ [S_LD "?"]
+    | Call (f, a)     -> 
+            (List.concat @@ List.rev @@ List.map (fun x -> (expr x) @ [S_SPUSH]) a) 
+            @ [S_CALL f] 
+            @ (List.map (fun x -> S_SPOP) a)
 
 
     let stmt s =
@@ -136,7 +147,12 @@ module Compile =
             | ExprSt e ->
                 (expr e @ [S_POP], lbl)
         in
-        let (code, _) = stmt' s 0 in
+        let rec stmt'' s n =
+            match s with
+            | [] -> []
+            | f::fs -> let (fc, n') = stmt' f n in
+                       (fc::stmt'' fs n')
+        in stmt'' s 0
         (*Printf.printf "%s\n" (String.concat "\n" @@ List.map
             (fun x -> match x with
                       | S_READ          -> "READ"
@@ -154,6 +170,5 @@ module Compile =
                       | S_FUN (s, a)    -> Printf.sprintf "FUN: %s ARGS: %s" s (String.concat " " a)
                       | S_RET           -> "RET"
         ) code); *)
-        [S_JMP "main"] @ code
 
   end

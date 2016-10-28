@@ -79,10 +79,7 @@ module Stmt =
 
     ostap (
       parse: f:(func)* m:main {
-            List.fold_right
-                (fun l r -> Seq (l, r))
-                f
-                (FunDcl ("main", [], Seq (m, Return (Const 0))))
+                f@[FunDcl ("main", [], Seq (m, Return (Const 0)))]
       };
 
       main: s:simple d:(-";" main)? {
