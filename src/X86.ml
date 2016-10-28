@@ -177,31 +177,39 @@ module Compile =
                   | R _ -> [X86Mov (s, M x)]
                   | _   -> [X86Mov (s, eax); X86Mov (eax, M x)])
               | S_BINOP op -> (*failwith "x86 binop"*)
-                  let lreg = eax in
-                  let rreg = ebx in
-                  let moveToReg l r lreg rreg = [X86Mov (l, lreg); X86Mov (r, rreg)] in
                   let r::l::stack' = stack in
-                  (l::stack', moveToReg l r lreg rreg @
+                  (l::stack',
+                        let getBinop lreg =
                              match op with
-                             | "+" -> [X86Add (rreg, lreg); X86Mov (lreg, l)]
-                             | "-" -> [X86Sub (rreg, lreg); X86Mov (lreg, l)]
-                             | "*" -> [X86Mul (rreg, lreg); X86Mov (lreg, l)]
-                             | "/" -> [X86Cltd; X86Div rreg; X86Mov (eax, l)]
-                             | "%" -> [X86Cltd; X86Div rreg; X86Mov (edx, l)]
-                             | "<" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetL edx; X86Mov (edx, l)]
-                             | ">" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetG edx; X86Mov (edx, l)]
-                             | "<=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetLE edx; X86Mov (edx, l)]
-                             | ">=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetGE edx; X86Mov (edx, l)]
-                             | "==" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetE edx; X86Mov (edx, l)]
-                             | "!=" -> [X86Cmp (rreg, lreg); X86Mov (L 0, edx); X86SetNE edx; X86Mov (edx, l)]
-                             | "&&" -> [X86Cmp (L 0, lreg); X86SetNE lreg;
-                                        X86Cmp (L 0, rreg); X86SetNE edx;
-                                        X86And (lreg, edx); X86And (L 1, edx);
-                                        X86Mov (edx, l)]
-                             | "!!" -> [X86Cmp (L 0, lreg); X86SetNE lreg;
-                                        X86Cmp (L 0, rreg); X86SetNE edx;
-                                        X86Or (lreg, edx); X86And (L 1, edx);
-                                        X86Mov (edx, l)])
+                             | "+" -> [X86Add (r, lreg)]
+                             | "-" -> [X86Sub (r, lreg)]
+                             | "*" -> [X86Mul (r, lreg)]
+                             | "/" -> [X86Mov (l, eax); X86Cltd; X86Div r; X86Mov (eax, lreg)]
+                             | "%" -> [X86Mov (l, eax); X86Cltd; X86Div r; X86Mov (edx, lreg)]
+                             | "<" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetL edx; X86Mov (edx, lreg)]
+                             | ">" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetG edx; X86Mov (edx, lreg)]
+                             | "<=" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetLE edx; X86Mov (edx, lreg)]
+                             | ">=" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetGE edx; X86Mov (edx, lreg)]
+                             | "==" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetE edx; X86Mov (edx, lreg)]
+                             | "!=" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetNE edx; X86Mov (edx, lreg)]
+                             | "&&" -> [X86Cmp  (L 0, lreg); 
+                                        X86SetNE eax;
+                                        X86Cmp  (L 0, r);
+                                        X86SetNE edx;
+                                        X86And  (eax, edx);
+                                        X86And  (L 1, edx);
+                                        X86Mov  (edx, lreg)]
+                             | "!!" -> [X86Cmp  (L 0, lreg);
+                                        X86SetNE eax;
+                                        X86Cmp  (L 0, r);
+                                        X86SetNE edx;
+                                        X86Or   (eax, edx);
+                                        X86And  (L 1, edx);
+                                        X86Mov  (edx, lreg)]
+                        in match l with
+                             | R _ -> getBinop l
+                             | _   -> [X86Mov (l, ebx)] @ getBinop ebx @ [X86Mov (ebx, l)]
+                   )
               | S_LBL s -> (stack, [X86Lbl s])
               | S_JMP s -> (stack, [X86Jmp s])
               | S_CJMP (c, s) -> (
