@@ -86,9 +86,20 @@ module Interpreter =
                     ((prepareState stack a, stack, input, output), code')
                   | S_CALL s ->
                     (*Printf.printf "CALL %s" s;*)
-                    let ((S_FUN (f, _))::_ as fcode) = List.find (fun ((S_FUN (f, _)::_)) -> f = s) fun_list in
-                    let (r, i, o) = run' ([], stack, input, output) fcode total fun_list in
-                    ((state, r::stack, i, o), code')
+                    try (
+                        let ((S_FUN (f, _))::_ as fcode) = List.find (fun ((S_FUN (f, _)::_)) -> f = s) fun_list in
+                        let (r, i, o) = run' ([], stack, input, output) fcode total fun_list in
+                        ((state, r::stack, i, o), code')
+                    ) with 
+                      | Not_found -> 
+                            match s with
+                            | "read"  -> 
+                                let (r, i, o) = Builtin.read input output in
+                                ((state, r::stack, i, o), code')
+                            | "write" ->
+                                let x::_ = stack in
+                                let (r, i, o) = Builtin.write x input output in
+                                ((state, r::stack, i, o), code')
                   )
                in
                run' context code'' total fun_list

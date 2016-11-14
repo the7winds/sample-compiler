@@ -49,6 +49,7 @@ module Expr =
 module Stmt =
   struct
 
+    open Builtin
     open Language.Stmt
 
     let rec eval' fun_list ((None, (state, input, output)) as c) stmt =
@@ -96,11 +97,19 @@ module Stmt =
 
     and eval_fun_call fun_list f args input output =
       (*Printf.printf "HELLO fun call %s\n" f;*)
-      let FunDcl (_, args', stmt) = List.find (fun (FunDcl (f', _, _)) -> f' = f) fun_list in
-      let state = List.combine args' args in
-      let (r, (s, i, o)) = eval' fun_list (None, (state, input, output)) stmt in
-      let Some v = r in (v, i, o)
-
+        try (
+          let FunDcl (_, args', stmt) = List.find (fun (FunDcl (f', _, _)) -> f' = f) fun_list in
+          let state = List.combine args' args in
+          let (r, (_, i, o)) = eval' fun_list (None, (state, input, output)) stmt in
+          let Some v = r in (v, i, o)
+        ) with
+          | Not_found ->
+                match f with
+                | "read"  ->
+                    Builtin.read input output
+                | "write" -> 
+                    let x::_ = args in
+                    Builtin.write x input output
     let eval input fun_list =
       let FunDcl (_, _, main_code) = List.hd @@ List.rev fun_list in
       let (Some 0, (_, _, output)) = eval' fun_list (None, ([], input, [])) main_code
