@@ -43,8 +43,7 @@ module Expr =
                        (v::t, i', o')
         in
         let (args, input', output') = getArgs a input output in
-        try eval_fun_call fun_list f args input' output' with
-        | RetVal (v, i, o) -> (v, i, o)
+        eval_fun_call fun_list f args input' output'
   end
 
 module Stmt =
@@ -52,60 +51,68 @@ module Stmt =
 
     open Language.Stmt
 
-    let rec eval' fun_list ((state, input, output) as c) stmt =
+    let rec eval' fun_list ((None, (state, input, output)) as c) stmt =
       (*Printf.printf "HELLO eval\n";*)
       let state' x = List.assoc x state in
       match stmt with
       | Skip          -> c
-      | Seq    (l, r) -> eval' fun_list (eval' fun_list c l) r
+      | Seq    (l, r) -> (
+            match eval' fun_list c l with
+            | ((None, _) as c') -> eval' fun_list c' r
+            | c' -> c'
+        )
       | Assign (x, e) ->
             (* (*Printf.printf "HELLO assign %s\n" x; *)*)
             let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
             (* (*Printf.printf "%s = %d\n" x v; *)*)
-            ((x, v) :: state, input', output')
+            (None, ((x, v)::state, input', output'))
       | Write   e     ->
             (*Printf.printf "HELLO write\n";*)
             let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
             (*Printf.printf "write = %d\n" v;*)
-            (state, input', output' @ [v])
+            (None, (state, input', output'@[v]))
       | Read    x     ->
             (*Printf.printf "HELLO read %s\n" x;*)
             let y::input' = input in
-            ((x, y) :: state, input', output)
+            (None, ((x, y)::state, input', output))
       | IfElse (e, s1, s2) ->
             let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
-            eval' fun_list (state, input', output') (if v <> 0 then s1 else s2)
-      | While (e, s) ->
-            let rec evalWhile e s ((state, input, output) as c) =
+            eval' fun_list (None, (state, input', output')) (if v <> 0 then s1 else s2)
+      | While (e, s) -> (
+            let rec evalWhile e s (None, (state, input, output) as c) =
                 let state' x = List.assoc x state in
-                let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
-                if v = 0 then (state, input', output')
-                         else let c' = eval' fun_list c s 
-                              in evalWhile e s c'
-          in
-          evalWhile e s c
+                let (cond, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
+                match cond with
+                | 0 -> (None, (state, input', output'))
+                | _ -> let c' = eval' fun_list c s in
+                       match c' with
+                       | (Some v, _) -> c'
+                       | (None, _)   -> evalWhile e s c'
+            in
+            evalWhile e s c
+        )
       | FunDcl (f, a, s) ->
             (*Printf.printf "HELLO fun declare %s\n" f;*)
             c
       | Return (e)       ->
             let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
-            (*(("?", v)::state, input', output')*)
-            raise (RetVal (v, input', output'))
+            (Some v, (state, input', output'))
+           (* raise (RetVal (v, input', output')) *)
       | ExprSt e         ->
             (*Printf.printf "HELLO expr st\n";*)
             let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
-            (state, input', output')
+            (None, (state, input', output'))
 
     and eval_fun_call fun_list f args input output =
       (*Printf.printf "HELLO fun call %s\n" f;*)
       let FunDcl (_, args', stmt) = List.find (fun (FunDcl (f', _, _)) -> f' = f) fun_list in
       let state = List.combine args' args in
-      let (state', input', output') = eval' fun_list (state, input, output) stmt in
-      (List.assoc "?" state', input', output')
+      let (r, (s, i, o)) = eval' fun_list (None, (state, input, output)) stmt in
+      let Some v = r in (v, i, o)
 
     let eval input fun_list =
       let FunDcl (_, _, main_code) = List.hd @@ List.rev fun_list in
-      try (let (_, _, output) = eval' fun_list ([], input, []) main_code in output) with
-      | RetVal (0, _, output) -> output
+      let (Some 0, (_, _, output)) = eval' fun_list (None, ([], input, [])) main_code
+      in output
 
   end
