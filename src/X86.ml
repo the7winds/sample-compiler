@@ -145,14 +145,6 @@ module Compile =
         | i::code' ->
             let (stack', x86code) =
               match i with
-              | S_READ   ->
-                  let s = allocate env stack in
-                  (s::stack, [X86Call "read"; X86Mov (eax, s)])
-              | S_WRITE  ->
-                  let s::stack' = stack in
-                  (stack', match s with
-                           | R _ -> [X86Push s; X86Call "write"; X86Pop s]
-                           | _   -> [X86Mov (s, ebx); X86Push ebx; X86Call "write"; X86Pop ebx])
               | S_PUSH n ->
                   let s = allocate env stack in
                   (s::stack, [X86Mov (L n, s)])

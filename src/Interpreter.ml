@@ -66,15 +66,6 @@ module Stmt =
             let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
             (* (*Printf.printf "%s = %d\n" x v; *)*)
             (None, ((x, v)::state, input', output'))
-      | Write   e     ->
-            (*Printf.printf "HELLO write\n";*)
-            let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
-            (*Printf.printf "write = %d\n" v;*)
-            (None, (state, input', output'@[v]))
-      | Read    x     ->
-            (*Printf.printf "HELLO read %s\n" x;*)
-            let y::input' = input in
-            (None, ((x, y)::state, input', output))
       | IfElse (e, s1, s2) ->
             let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
             eval' fun_list (None, (state, input', output')) (if v <> 0 then s1 else s2)

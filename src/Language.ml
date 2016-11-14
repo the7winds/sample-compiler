@@ -67,8 +67,6 @@ module Stmt =
 
     type t =
     | Skip
-    | Read   of string
-    | Write  of Expr.t
     | Assign of string * Expr.t
     | Seq    of t * t
     | IfElse of Expr.t * t * t
@@ -79,7 +77,7 @@ module Stmt =
 
     ostap (
       parse: f:(func)* m:main {
-                f@[FunDcl ("main", [], Seq (m, Return (Const 0)))]
+        f@[FunDcl ("main", [], Seq (m, Return (Const 0)))]
       };
 
       main: s:simple d:(-";" main)? {
@@ -101,8 +99,6 @@ module Stmt =
 
       simple:
         x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
-      | %"read"  "(" x:IDENT ")"         {Read x}
-      | %"write" "(" e:!(Expr.parse) ")" {Write e}
       | %"skip"                          {Skip}
       | %"while" e:!(Expr.parse) %"do"
                  s:main
@@ -113,12 +109,14 @@ module Stmt =
                   %"then" main )*
             es:(%"else" main)?
         %"fi"
-        {IfElse (e, s, List.fold_right
+        {
+            IfElse (e, s, List.fold_right
                            (fun (e, t) r -> IfElse (e, t, r))
                            suf
                            (match es with
                             | Some e -> e
-                            | _ -> Skip))}
+                            | _ -> Skip))
+        }
       | %"repeat" s:main
         %"until" e:!(Expr.parse)         {Seq (s, While (Binop ("==", Const 0, e), s))}
       | %"for" s1:main "," e:!(Expr.parse) "," s2:main

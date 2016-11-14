@@ -1,6 +1,4 @@
 type i =
-| S_READ
-| S_WRITE
 | S_POP
 | S_SPOP
 | S_PUSH  of int
@@ -42,12 +40,6 @@ module Interpreter =
                       | _::code'         -> getLblCode s code'
                   in
                   (match i with
-                  | S_READ ->
-                    let y::input' = input in
-                    ((state, y::stack, input', output), code')
-                  | S_WRITE ->
-                    let y::stack' = stack in
-                    ((state, stack', input, output @ [y]), code')
                   | S_PUSH n ->
                     ((state, n::stack, input, output), code')
                   | S_SPUSH ->
@@ -128,8 +120,6 @@ module Compile =
             match s with
             | Skip          -> ([],                 lbl)
             | Assign (x, e) -> (expr e @ [S_ST x],  lbl)
-            | Read    x     -> ([S_READ; S_ST x],   lbl)
-            | Write   e     -> (expr e @ [S_WRITE], lbl)
             | Seq    (l, r) ->
                 let (code1, lbl1) = stmt' l lbl in
                 let (code2, lbl2) = stmt' r lbl1 in
