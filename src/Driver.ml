@@ -1,4 +1,7 @@
 open Ostap
+open Builtin.Value
+
+module BV = Builtin.Value
 
 let parse infile =
   let s = Util.read infile in
@@ -33,7 +36,7 @@ let main = ()
          | _ ->
             let rec read acc =
             try
-                let r = read_int () in
+                let r = BV.Int (read_int ()) in
                 Printf.printf "> ";
                 read (acc @ [r]) 
                 with End_of_file -> acc
@@ -44,7 +47,7 @@ let main = ()
                 | `SM  -> StackMachine.Interpreter.run input (StackMachine.Compile.stmt stmt)
                 | _    -> Interpreter.Stmt.eval input stmt
             in
-            List.iter (fun i -> Printf.printf "%d\n" i) output
+            List.iter (fun i -> Printf.printf "%s\n" (BV.str i)) output
         )
 
     | `Fail er -> Printf.eprintf "%s" er

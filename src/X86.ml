@@ -1,4 +1,7 @@
-type opnd = R of int | S of int | M of string | L of int
+open Builtin.Value
+module BV = Builtin.Value
+
+type opnd = R of int | S of int | M of string | L of BV.t
 
 let x86regs = [|
   "%eax";
@@ -100,7 +103,7 @@ module Show =
         | R i -> x86regs.(i)
         | S i -> Printf.sprintf "-%d(%%ebp)" ((env#local_n + i) * word_size)
         | M x -> Printf.sprintf "%d(%%ebp)" (env#get_shift x)
-        | L i -> Printf.sprintf "$%d" i
+        | L i -> Printf.sprintf "$%s" (BV.str i)
         in
         let opndByte = function
         | R i -> x86regsByte.(i)
@@ -182,25 +185,25 @@ module Compile =
                              | "*" -> [X86Mul (r, lreg)]
                              | "/" -> [X86Mov (l, eax); X86Cltd; X86Div r; X86Mov (eax, lreg)]
                              | "%" -> [X86Mov (l, eax); X86Cltd; X86Div r; X86Mov (edx, lreg)]
-                             | "<" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetL edx; X86Mov (edx, lreg)]
-                             | ">" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetG edx; X86Mov (edx, lreg)]
-                             | "<=" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetLE edx; X86Mov (edx, lreg)]
-                             | ">=" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetGE edx; X86Mov (edx, lreg)]
-                             | "==" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetE edx; X86Mov (edx, lreg)]
-                             | "!=" -> [X86Cmp (r, lreg); X86Mov (L 0, edx); X86SetNE edx; X86Mov (edx, lreg)]
-                             | "&&" -> [X86Cmp  (L 0, lreg); 
+                             | "<" -> [X86Cmp (r, lreg); X86Mov (L (BV.Int 0), edx); X86SetL edx; X86Mov (edx, lreg)]
+                             | ">" -> [X86Cmp (r, lreg); X86Mov (L (BV.Int 0), edx); X86SetG edx; X86Mov (edx, lreg)]
+                             | "<=" -> [X86Cmp (r, lreg); X86Mov (L (BV.Int 0), edx); X86SetLE edx; X86Mov (edx, lreg)]
+                             | ">=" -> [X86Cmp (r, lreg); X86Mov (L (BV.Int 0), edx); X86SetGE edx; X86Mov (edx, lreg)]
+                             | "==" -> [X86Cmp (r, lreg); X86Mov (L (BV.Int 0), edx); X86SetE edx; X86Mov (edx, lreg)]
+                             | "!=" -> [X86Cmp (r, lreg); X86Mov (L (BV.Int 0), edx); X86SetNE edx; X86Mov (edx, lreg)]
+                             | "&&" -> [X86Cmp  (L (BV.Int 0), lreg); 
                                         X86SetNE eax;
-                                        X86Cmp  (L 0, r);
+                                        X86Cmp  (L (BV.Int 0), r);
                                         X86SetNE edx;
                                         X86And  (eax, edx);
-                                        X86And  (L 1, edx);
+                                        X86And  (L (BV.Int 1), edx);
                                         X86Mov  (edx, lreg)]
-                             | "!!" -> [X86Cmp  (L 0, lreg);
+                             | "!!" -> [X86Cmp  (L (BV.Int 0), lreg);
                                         X86SetNE eax;
-                                        X86Cmp  (L 0, r);
+                                        X86Cmp  (L (BV.Int 0), r);
                                         X86SetNE edx;
                                         X86Or   (eax, edx);
-                                        X86And  (L 1, edx);
+                                        X86And  (L (BV.Int 1), edx);
                                         X86Mov  (edx, lreg)]
                         in match l with
                              | R _ -> getBinop l
@@ -212,8 +215,8 @@ module Compile =
                     let a::stack' = stack in
                     (stack',
                      (match a with
-                     | R _ -> [X86Cmp (L 0, a)]
-                     | _   -> [X86Mov (a, eax); X86Cmp (L 0, eax)]) @
+                     | R _ -> [X86Cmp (L (BV.Int 0), a)]
+                     | _   -> [X86Mov (a, eax); X86Cmp (L (BV.Int 0), eax)]) @
                      (match c with
                      | "Z" -> [X86Jz s]
                      | _   -> failwith "BAD CONDITION x86"))

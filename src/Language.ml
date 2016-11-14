@@ -1,11 +1,15 @@
 open Ostap
 open Matcher
 
+open Builtin.Value
+
+module BV = Builtin.Value
+
 module Expr =
   struct
 
     type t =
-    | Const of int
+    | Const of BV.t
     | Var   of string
     | Binop of string * t * t
     | Call  of string * t list
@@ -51,7 +55,7 @@ module Expr =
         };
 
       primary:
-        n:DECIMAL {Const n}
+        n:DECIMAL {Const (BV.Int n)}
       | x:IDENT a:(-"(" args -")")?  {
           match a with
           | Some t -> Call (x, t)
@@ -77,7 +81,7 @@ module Stmt =
 
     ostap (
       parse: f:(func)* m:main {
-        f@[FunDcl ("main", [], Seq (m, Return (Const 0)))]
+        f@[FunDcl ("main", [], Seq (m, Return (Const (BV.Int 0))))]
       };
 
       main: s:simple d:(-";" main)? {
@@ -118,7 +122,7 @@ module Stmt =
                             | _ -> Skip))
         }
       | %"repeat" s:main
-        %"until" e:!(Expr.parse)         {Seq (s, While (Binop ("==", Const 0, e), s))}
+        %"until" e:!(Expr.parse)         {Seq (s, While (Binop ("==", Const (BV.Int 0), e), s))}
       | %"for" s1:main "," e:!(Expr.parse) "," s2:main
         %"do"
                s:main

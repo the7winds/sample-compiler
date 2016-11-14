@@ -1,7 +1,10 @@
+open Builtin.Value
+module BV = Builtin.Value
+
 type i =
 | S_POP
 | S_SPOP
-| S_PUSH  of int
+| S_PUSH  of BV.t
 | S_SPUSH
 | S_LD    of string
 | S_ST    of string
@@ -26,7 +29,7 @@ module Interpreter =
       let rec run' (state, stack, input, output) code total fun_list =
           (*Printf.printf "STATE SZ %d\n" (List.length state);*)
        match code with
-       | []       -> (0, input, output)
+       | []       -> (BV.Int 0, input, output)
        | i::code' ->
             if i = S_RET
             then let s::stack' = stack in (s, input, output)
@@ -71,8 +74,8 @@ module Interpreter =
                     let a::stack' = stack in
                     ((state, stack', input, output),
                         if (match c with
-                            | "NZ" -> a <> 0
-                            | "Z"  -> a =  0
+                            | "NZ" -> (BV.to_int a) <> 0
+                            | "Z"  -> (BV.to_int a) =  0
                             | _    -> failwith "BAD CONDITION") then getLblCode s total
                                                                 else code')
                   | S_FUN (s, a) ->
