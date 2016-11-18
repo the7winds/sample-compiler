@@ -1,4 +1,4 @@
-n := read ();
+n := read();
 f := 1;
 
 while n >= 1 do
