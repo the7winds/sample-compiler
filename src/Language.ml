@@ -61,6 +61,12 @@ module Expr =
           | Some t -> Call (x, t)
           | _      -> Var   x
         }
+      | s:STRING {
+            let b = Bytes.of_string s in
+            let l = Bytes.length b in
+            let b' = Bytes.sub b 1 (l-2) in
+            Const (BV.String b')
+        }
       | -"(" parse -")"
     )
 
