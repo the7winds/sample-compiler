@@ -103,6 +103,30 @@ module Interpreter =
                                 let x::_ = stack in
                                 let (r, i, o) = Builtin.write x input output in
                                 ((state, r::stack, i, o), code')
+                            | "strmake" ->
+                                let n::x::_ = stack in
+                                ((state, (Builtin.strmake n x)::stack, input, output), code')
+                            | "strset" ->
+                                let s::i::c::_ = stack in
+                                ((state, (Builtin.strset s i c)::stack, input, output), code')
+                            | "strget" ->
+                                let s::i::_ = stack in
+                                ((state, (Builtin.strget s i)::stack, input, output), code')
+                            | "strdup" ->
+                                let s::_ = stack in
+                                ((state, (Builtin.strdup s)::stack, input, output), code')
+                            | "strcat" ->
+                                let s1::s2::_ = stack in
+                                ((state, (Builtin.strcat s1 s2)::stack, input, output), code')
+                            | "strcmp" ->
+                                let s1::s2::_ = stack in
+                                ((state, (Builtin.strcmp s1 s2)::stack, input, output), code')
+                            | "strlen" ->
+                                let s::_ = stack in
+                                ((state, (Builtin.strlen s)::stack, input, output), code')
+                            | "strsub" ->
+                                let s::i::l::_ = stack in
+                                ((state, (Builtin.strsub s i l)::stack, input, output), code')
                   )
                in
                run' context code'' total fun_list
