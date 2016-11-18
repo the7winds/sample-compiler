@@ -34,5 +34,5 @@ let strlen (Value.String b) = Value.Int (Bytes.length b)
 
 let strsub (Value.String b) (Value.Int i) (Value.Int l) = Value.String (Bytes.sub b i l)
 
-let strget s i = strsub s i (Value.Int 1)
+let strget (Value.String b) (Value.Int i) = Value.Int (Char.code (Bytes.get b i))
 
