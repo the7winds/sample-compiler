@@ -18,10 +18,10 @@ let read (x::input') output = (x, input', output)
 
 let write x input output = (Value.Int 0, input, output@[x])
 
-let strmake (Value.String c) (Value.Int n) = Value.String (Bytes.make n (Bytes.get c 0))
+let strmake (Value.Int n) (Value.Int c) = Value.String (Bytes.make n (Char.chr c))
 
-let strset (Value.String b) (Value.Int i) (Value.String c) = 
-    Bytes.set b i (Bytes.get c 0);
+let strset (Value.String b) (Value.Int i) (Value.Int c) = 
+    Bytes.set b i (Char.chr c);
     Value.String b
 
 let strdup (Value.String b) = Value.String (Bytes.copy b)

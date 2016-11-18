@@ -121,6 +121,30 @@ module Stmt =
                 | "write" -> 
                     let x::_ = args in
                     Builtin.write x input output
+                | "strmake" ->
+                    let n::x::_ = args in
+                    (Builtin.strmake n x, input, output)
+                | "strset" ->
+                    let s::i::c::_ = args in
+                    (Builtin.strset s i c, input, output) 
+                | "strget" ->
+                    let s::i::_ = args in
+                    (Builtin.strget s i, input, output)
+                | "strdup" ->
+                    let s::_ = args in
+                    (Builtin.strdup s, input, output)
+                | "strcat" ->
+                    let s1::s2::_ = args in
+                    (Builtin.strcat s1 s2, input, output)
+                | "strcmp" ->
+                    let s1::s2::_ = args in
+                    (Builtin.strcmp s1 s2, input, output)
+                | "strlen" ->
+                    let s::_ = args in
+                    (Builtin.strlen s, input, output)
+                | "strsub" ->
+                    let s::i::l::_ = args in
+                    (Builtin.strsub s i l, input, output)
     let eval input fun_list =
       let FunDcl (_, _, main_code) = List.hd @@ List.rev fun_list in
       let (Some (BV.Int 0), (_, _, output)) = eval' fun_list (None, ([], input, [])) main_code

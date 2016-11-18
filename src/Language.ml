@@ -67,6 +67,9 @@ module Expr =
             let b' = Bytes.sub b 1 (l-2) in
             Const (BV.String b')
         }
+      | c:CHAR {
+            Const (BV.Int (Char.code c))
+        }
       | -"(" parse -")"
     )
 
