@@ -40,7 +40,8 @@ module Interpreter =
                       | []               -> failwith (Printf.sprintf "WHERE IS NO LABEL %s" s)
                       | (S_LBL x)::code'
                             when x = s   -> code
-                      | _::code'         -> getLblCode s code'
+                      | a::code'         ->
+                            getLblCode s code'
                   in
                   (match i with
                   | S_PUSH n ->
@@ -67,10 +68,13 @@ module Interpreter =
                     let r::l::stack' = stack in
                     ((state, (Interpreter.Expr.evalBinOp s l r)::stack', input, output), code')
                   | S_LBL s ->
+                    (*Printf.printf "LBL %s\n" s; *)
                     ((state, stack, input, output), code')
                   | S_JMP s ->
+                    (*Printf.printf "JMP %s\n" s; *)
                     ((state, stack, input, output), getLblCode s total)
                   | S_CJMP (c, s) ->
+                    (*Printf.printf "CJMP %s\n" s; *)
                     let a::stack' = stack in
                     ((state, stack', input, output),
                         if (match c with
@@ -88,10 +92,10 @@ module Interpreter =
                     in
                     ((prepareState stack a, stack, input, output), code')
                   | S_CALL s ->
-                    (*Printf.printf "CALL %s" s;*)
+                    (*Printf.printf "CALL %s\n" s;*)
                     try (
                         let ((S_FUN (f, _))::_ as fcode) = List.find (fun ((S_FUN (f, _)::_)) -> f = s) fun_list in
-                        let (r, i, o) = run' ([], stack, input, output) fcode total fun_list in
+                        let (r, i, o) = run' ([], stack, input, output) fcode fcode fun_list in
                         ((state, r::stack, i, o), code')
                     ) with 
                       | Not_found -> 
