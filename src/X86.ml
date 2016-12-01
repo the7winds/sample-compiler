@@ -95,15 +95,33 @@ let allocate env stack =
   | (R n)::_ when n < num_of_regs-1 -> R (n+1)
   | _                               -> env#allocate 1; S 1
 
+class x86data =
+  object(self)
+    val    str_cnt = ref 0
+    val    str_idx = ref []
+
+    method add_const s = if ((List.filter (fun (x, _) -> Bytes.equal x s) (!str_idx)) = [])
+                         then   str_cnt := !str_cnt+1;
+                                str_idx := (s, !str_cnt)::(!str_idx);
+
+    method get_index s = List.assoc s !str_idx
+
+    method iterate f = List.iter f !str_idx
+  end
+
 module Show =
   struct
 
-    let instr env = 
+    let instr data env = 
         let opnd = function
         | R i -> x86regs.(i)
         | S i -> Printf.sprintf "-%d(%%ebp)" ((env#local_n + i) * word_size)
         | M x -> Printf.sprintf "%d(%%ebp)" (env#get_shift x)
-        | L i -> Printf.sprintf "$%s" (BV.str i)
+        | L i -> (
+            match i with
+            | BV.Int d    -> Printf.sprintf "$%d" d
+            | BV.String s -> Printf.sprintf "$str%d" (data#get_index s)
+        )
         in
         let opndByte = function
         | R i -> x86regsByte.(i)
@@ -141,14 +159,17 @@ module Compile =
 
     open StackMachine
 
-    let stack_program env code =
+    let stack_program env data code =
       let rec compile stack code =
         match code with
         | []       -> []
         | i::code' ->
             let (stack', x86code) =
               match i with
-              | S_PUSH n ->
+              | S_PUSH n -> 
+                  (match n with
+                  | BV.Int _    -> ()
+                  | BV.String s -> data#add_const s);
                   let s = allocate env stack in
                   (s::stack, [X86Mov (L n, s)])
               | S_SPUSH ->
@@ -242,14 +263,22 @@ module Compile =
   end
 
 let compile stmt =
+  let data = new x86data in
   let codes = List.map 
                     (fun sp -> let env = new x86env in
-                               let p = Compile.stack_program env sp in 
-                               (env, p))
+                               let p = Compile.stack_program env data sp in 
+                               (data, env, p))
                     @@ StackMachine.Compile.stmt stmt in
   let asm  = Buffer.create 1024 in
   let (!!) s = Buffer.add_string asm s in
   let (!)  s = !!s; !!"\n" in
+  let datainfo data =
+        !".data";
+        data#iterate (fun (s, n) -> !(Printf.sprintf "str%d:" n);
+                                    !(Printf.sprintf "\t.int %d" (Bytes.length s));
+                                    !(Printf.sprintf "\t.ascii \"%s\"" s);)
+  in
+  datainfo data;
   !"\t.text";
   !"\t.globl\tmain";
   let prologue env =
@@ -258,10 +287,10 @@ let compile stmt =
          !(Printf.sprintf "\tsubl\t$%d,\t%%esp" ((env#local_n + env#allocated) * word_size))
   in
  
-  List.iter (fun (env, code) ->
-      !(Show.instr env @@ List.hd code);
+  List.iter (fun (data, env, code) ->
+      !(Show.instr data env @@ List.hd code);
       prologue env;
-      List.iter (fun i -> !(Show.instr env i)) @@ List.tl code;
+      List.iter (fun i -> !(Show.instr data env i)) @@ List.tl code;
   ) codes;
   Buffer.contents asm
 
