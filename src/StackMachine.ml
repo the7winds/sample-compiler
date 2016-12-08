@@ -18,6 +18,8 @@ type i =
 | S_RET
 | S_RSAVE
 | S_RRESTORE
+| S_ELEM
+| S_STA   of string * int
 
 
 module Interpreter =
@@ -154,14 +156,19 @@ module Compile =
             (List.concat @@ List.rev @@ List.map (fun x -> (expr x) @ [S_SPUSH]) a) 
             @ [S_CALL f] 
             @ (List.map (fun x -> S_SPOP) a)
-
+    | Access (x, l) -> (S_LD x)::(List.fold_left (fun s x -> s @ expr x @ [S_ELEM]) [] l)
 
     let stmt s =
         let rec stmt' s lbl =
             let getLblName lbl = Printf.sprintf "CL%d" lbl in
             match s with
             | Skip          -> ([],                 lbl)
-            | Assign (x, e) -> (expr e @ [S_ST x],  lbl)
+            | Assign (lv, e) -> (
+                match lv with
+                | Var x -> (expr e @ [S_ST x],  lbl)
+                | Access (x, i) -> 
+                    ((List.fold_left (fun s x -> s @ expr x) [] i) @ (expr e) @ [S_STA (x, List.length i)], lbl)
+              )
             | Seq    (l, r) ->
                 let (code1, lbl1) = stmt' l lbl in
                 let (code2, lbl2) = stmt' r lbl1 in

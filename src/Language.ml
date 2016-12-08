@@ -74,7 +74,7 @@ module Expr =
 
       intArr:
         "[" a:seqInt "]" {
-            BV.Array (Array.of_list [])
+            BV.Array (Array.of_list a)
         };
 
       boxed:
@@ -88,20 +88,17 @@ module Expr =
       idx:
         "[" n:dec "]" {Const n};
 
-      idxes:
-        i:idx suf:idx* {i::suf};
-
       primary:
         n:dec               {Const n}
       | s:str               {Const s}
       | a:(intArr|boxed)    {Const a}
-      | x:IDENT a:(-"(" args -")")? i:(idxes)? {
+      | x:IDENT a:(-"(" args -")")? i:(idx)* {
           match a with
           | Some t -> Call (x, t)
           | _      ->
                 match i with
-                | Some i -> Access (x, i)
-                | _      -> Var x
+                | [] -> Var x
+                | _  -> Access (x, i)
         }
       | c:CHAR {
             Const (BV.Int (Char.code c))

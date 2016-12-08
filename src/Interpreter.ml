@@ -36,7 +36,7 @@ module Expr =
 
     )
 
-    let rec eval fun_list state eval_fun_call input output = function
+    let rec eval fun_list state eval_fun_call input output = function 
     | Const  n -> (n, input, output)
     | Var    x -> (state x, input, output)
     | Binop (o, l, r) ->
@@ -53,6 +53,15 @@ module Expr =
         in
         let (args, input', output') = getArgs a input output in
         eval_fun_call fun_list f args input' output'
+    | Access (a, i) ->
+        let (i', input', output') = 
+            List.fold_left (
+                fun (_i, _in, _out) x -> 
+                    let (_i', _in', _out') = eval fun_list state eval_fun_call _in _out x
+                    in (_i@[_i'], _in', _out')
+            ) ([], input, output) i in
+        (List.fold_left (fun ar x -> 
+            Array.get (BV.of_array ar) (BV.to_int x)) (state a) i', input', output')
   end
 
 module Stmt =
@@ -65,7 +74,7 @@ module Stmt =
     module BV = Builtin.Value
 
     let rec eval' fun_list ((None, (state, input, output)) as c) stmt =
-      (*Printf.eprintf "HELLO eval\n";*)
+      (* Printf.eprintf "HELLO eval\n"; *)
       let state' x = List.assoc x state in
       match stmt with
       | Skip          -> c
@@ -74,11 +83,19 @@ module Stmt =
             | ((None, _) as c') -> eval' fun_list c' r
             | c' -> c'
         )
-      | Assign (x, e) ->
+      | Assign (x, e) -> (
             (*Printf.eprintf "HELLO assign %s\n" x;*)
-            let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
-            (*Printf.eprintf "%s = %d\n" x (BV.to_int v);*)
-            (None, ((x, v)::state, input', output'))
+                match x with
+                | Language.Expr.Var x ->
+                    let (v, input', output') =
+                        Expr.eval fun_list state' eval_fun_call input output e in
+                    (None, ((x, v)::state, input', output'))
+                | Language.Expr.Access (x, i) ->
+                    (*TODO*)
+                    failwith "unimplemented arrays"
+                    
+                (*Printf.eprintf "%s = %d\n" x (BV.to_int v);*)
+        )
       | IfElse (e, s1, s2) ->
             let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
             eval' fun_list (None, (state, input', output')) (if (BV.to_int v) <> 0 then s1 else s2)
