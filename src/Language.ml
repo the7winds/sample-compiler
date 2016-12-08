@@ -1,8 +1,7 @@
 open Ostap
 open Matcher
 
-open Builtin.Value
-
+open Builtin
 module BV = Builtin.Value
 
 module Expr =
@@ -13,6 +12,7 @@ module Expr =
     | Var   of string
     | Binop of string * t * t
     | Call  of string * t list
+    | Access of string * t list
 
     ostap (
       parse: ori;
@@ -54,18 +54,54 @@ module Expr =
             | _      -> []
         };
 
-      primary:
-        n:DECIMAL {Const (BV.Int n)}
-      | x:IDENT a:(-"(" args -")")?  {
-          match a with
-          | Some t -> Call (x, t)
-          | _      -> Var   x
-        }
-      | s:STRING {
+      str:
+        s:STRING {
             let b = Bytes.of_string s in
             let l = Bytes.length b in
             let b' = Bytes.sub b 1 (l-2) in
-            Const (BV.String b')
+            BV.String b'
+        };
+
+      dec:
+        n:DECIMAL {BV.Int n};
+
+      seqInt:
+        e:(dec)? suf:(-"," dec)* {
+            match e with
+            | Some w -> w::suf
+            | _      -> []
+        };
+
+      intArr:
+        "[" a:seqInt "]" {
+            BV.Array (Array.of_list [])
+        };
+
+      boxed:
+        "{" e:(intArr|str|boxed)? suf:(intArr|str|boxed)* "}" {
+            let l = match e with
+                    | Some w -> w::suf
+                    | _      -> []
+            in BV.Array (Array.of_list l)
+        };
+
+      idx:
+        "[" n:dec "]" {Const n};
+
+      idxes:
+        i:idx suf:idx* {i::suf};
+
+      primary:
+        n:dec               {Const n}
+      | s:str               {Const s}
+      | a:(intArr|boxed)    {Const a}
+      | x:IDENT a:(-"(" args -")")? i:(idxes)? {
+          match a with
+          | Some t -> Call (x, t)
+          | _      ->
+                match i with
+                | Some i -> Access (x, i)
+                | _      -> Var x
         }
       | c:CHAR {
             Const (BV.Int (Char.code c))
@@ -80,7 +116,7 @@ module Stmt =
 
     type t =
     | Skip
-    | Assign of string * Expr.t
+    | Assign of Expr.t * Expr.t
     | Seq    of t * t
     | IfElse of Expr.t * t * t
     | While  of Expr.t * t
@@ -111,7 +147,7 @@ module Stmt =
         %"end"                           {FunDcl (f, a, s)};
 
       simple:
-        x:IDENT ":=" e:!(Expr.parse)     {Assign (x, e)}
+        x:!(Expr.parse) ":=" e:!(Expr.parse) {Assign (x, e)}
       | %"skip"                          {Skip}
       | %"while" e:!(Expr.parse) %"do"
                  s:main
