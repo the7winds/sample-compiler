@@ -19,7 +19,7 @@ type i =
 | S_RSAVE
 | S_RRESTORE
 | S_ELEM
-| S_STA   of string * int
+| S_STA
 
 
 module Interpreter =
@@ -87,15 +87,9 @@ module Interpreter =
                   | S_ELEM ->
                     let n::a::stack' = stack in
                     ((state, (Array.get (BV.of_array a) (BV.to_int n))::stack', input, output), code')
-                  | S_STA (x, n) ->
-                    let a = List.assoc x state in
-                    let rec take a stack n =
-                        if (n == 0) then (a, stack)
-                                    else let i::stack' = stack in
-                                         take (Array.get (BV.of_array a) (BV.to_int i)) stack' (n-1)
-                    in
-                    let (a', i::v::stack') = take a stack (n-1) in
-                    let _ = Array.set (BV.of_array a') (BV.to_int i) v in
+                  | S_STA ->
+                    let i::v::a::stack' = stack in
+                    let _ = Array.set (BV.of_array a) (BV.to_int i) v in
                     ((state, stack', input, output), code')
                   | S_FUN (s, a) ->
                     (*Printf.printf "ARGS: %s\n" (String.concat " " a);*)
@@ -179,8 +173,9 @@ module Compile =
             | Assign (lv, e) -> (
                 match lv with
                 | Var x -> (expr e @ [S_ST x],  lbl)
-                | Access (x, i) -> 
-                    ((expr e) @ (List.concat @@ List.map expr i) @ [S_STA (x, List.length i)], lbl)
+                | Access (x, i) ->
+                    let idx::ridx = List.rev i in
+                    ([S_LD x] @ (expr e) @ (List.fold_left (fun s x -> s @ expr x @ [S_ELEM]) [] (List.rev ridx)) @ expr idx @ [S_STA], lbl)
               )
             | Seq    (l, r) ->
                 let (code1, lbl1) = stmt' l lbl in
