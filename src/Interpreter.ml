@@ -54,14 +54,20 @@ module Expr =
         let (args, input', output') = getArgs a input output in
         eval_fun_call fun_list f args input' output'
     | Access (a, i) ->
-        let (i', input', output') = 
-            List.fold_left (
-                fun (_i, _in, _out) x -> 
-                    let (_i', _in', _out') = eval fun_list state eval_fun_call _in _out x
-                    in (_i@[_i'], _in', _out')
-            ) ([], input, output) i in
-        (List.fold_left (fun ar x -> 
-            Array.get (BV.of_array ar) (BV.to_int x)) (state a) i', input', output')
+        match i with
+        | [] -> (state a, input, output)
+        | _  ->
+            let (i', input', output') = 
+                List.fold_left (
+                    fun (_i, _in, _out) x -> 
+                        let (_i', _in', _out') = eval fun_list state eval_fun_call _in _out x
+                        in (_i@[_i'], _in', _out')
+                ) ([], input, output) i in
+            (List.fold_left (
+                fun ar x -> 
+                    Array.get (BV.of_array ar) (BV.to_int x)
+                )
+             (state a) i', input', output')
   end
 
 module Stmt =
@@ -90,10 +96,13 @@ module Stmt =
                     let (v, input', output') =
                         Expr.eval fun_list state' eval_fun_call input output e in
                     (None, ((x, v)::state, input', output'))
-                | Language.Expr.Access (x, i) ->
-                    (*TODO*)
-                    failwith "unimplemented arrays"
-                    
+                | Language.Expr.Access (x', idxs) ->
+                    let (v, i, o) = Expr.eval fun_list state' eval_fun_call input output e in
+                    let idx::ridxs = List.rev idxs in
+                    let (vi, i', o') = Expr.eval fun_list state' eval_fun_call i o idx in
+                    let (va, i'', o'') = Expr.eval fun_list state' eval_fun_call i' o' (Language.Expr.Access (x', (List.rev ridxs))) in
+                    let _ = Array.set (BV.of_array va) (BV.to_int vi) v in
+                    (None, (state, i'', o''))
                 (*Printf.eprintf "%s = %d\n" x (BV.to_int v);*)
         )
       | IfElse (e, s1, s2) ->

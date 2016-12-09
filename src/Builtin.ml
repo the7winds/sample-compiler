@@ -16,6 +16,10 @@ module Value =
         match x with
         | Int x -> Printf.sprintf "%d" x
         | String s -> Printf.sprintf "%s" s
+    let rec take a = function
+    | []  -> a
+    | idx -> let i::idx' = idx in
+                 take (Array.get (of_array a) (to_int i)) idx'
   end
 
 let read (x::input') output = (x, input', output)
