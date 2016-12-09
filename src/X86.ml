@@ -264,18 +264,19 @@ module Compile =
               | S_ELEM ->
                     let i::a::stack' = stack in
                     (a::stack', [X86Mov (i, eax);
+                                 X86Mul (L (BV.of_int 4), eax);
                                  X86Add (L (BV.of_int 4), eax);
                                  X86Add (a, eax);
                                  X86Mov (A eax, ebx);
                                  X86Mov (ebx, a)])
               | S_STA ->
-                    let a::i::e::stack' = stack in
-                    (stack, [X86Mov (i, eax);
-                             X86Mov (a, ebx);
-                             X86Add (eax, ebx);
-                             X86Add (L (BV.of_int 4), eax);
-                             X86Mov (e, edx);
-                             X86Mov (edx, A eax)])
+                    let i::a::e::stack' = stack in
+                    (stack', [X86Mov (i, eax);
+                              X86Mul (L (BV.of_int 4), eax);
+                              X86Add (L (BV.of_int 4), eax);
+                              X86Add (a, eax);
+                              X86Mov (e, ebx);
+                              X86Mov (ebx, A eax)])
             in
             x86code @ compile stack' code'
       in

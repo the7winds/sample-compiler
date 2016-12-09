@@ -88,7 +88,7 @@ module Interpreter =
                     let n::a::stack' = stack in
                     ((state, (Array.get (BV.of_array a) (BV.to_int n))::stack', input, output), code')
                   | S_STA ->
-                    let i::v::a::stack' = stack in
+                    let i::a::v::stack' = stack in
                     let _ = Array.set (BV.of_array a) (BV.to_int i) v in
                     ((state, stack', input, output), code')
                   | S_FUN (s, a) ->
@@ -184,7 +184,7 @@ module Compile =
                 | Var x -> (expr e @ [S_ST x],  lbl)
                 | Access (x, i) ->
                     let idx::ridx = List.rev i in
-                    ([S_LD x] @ (expr e) @ (List.fold_left (fun s x -> s @ expr x @ [S_ELEM]) [] (List.rev ridx)) @ expr idx @ [S_STA], lbl)
+                    ((expr e) @ [S_LD x] @ (List.fold_left (fun s x -> s @ expr x @ [S_ELEM]) [] (List.rev ridx)) @ expr idx @ [S_STA], lbl)
               )
             | Seq    (l, r) ->
                 let (code1, lbl1) = stmt' l lbl in
