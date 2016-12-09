@@ -1,7 +1,12 @@
 open Builtin.Value
 module BV = Builtin.Value
 
-type opnd = R of int | S of int | M of string | L of BV.t | A of opnd
+type opnd =
+    R  of int
+  | S  of int
+  | M  of string
+  | L  of BV.t
+  | A  of opnd
 
 let x86regs = [|
   "%eax";
@@ -68,7 +73,7 @@ class x86env =
     val    local_cnt  = ref 0
     val    args       = ref M.empty
     val    args_cnt   = ref 1
-    
+
     method local x    = if not (M.mem x !local_vars) && not (M.mem x !args)
                         then local_vars := M.add x (!local_cnt + 1) !local_vars;
                              local_cnt := !local_cnt + 1;
@@ -77,7 +82,7 @@ class x86env =
     method arg x      = if not (M.mem x !local_vars) && not (M.mem x !args)
                         then args := M.add x (!args_cnt + 1) !args;
                              args_cnt := !args_cnt + 1
-    
+
     method get_shift x = word_size * (if M.mem x !args then M.find x !args
                                           else -(M.find x !local_vars))
 
@@ -112,7 +117,7 @@ class x86data =
 module Show =
   struct
 
-    let instr data env = 
+    let instr data env =
         let rec opnd = function
         | R i -> x86regs.(i)
         | S i -> Printf.sprintf "-%d(%%ebp)" ((env#local_n + i) * word_size)
@@ -167,7 +172,7 @@ module Compile =
         | i::code' ->
             let (stack', x86code) =
               match i with
-              | S_PUSH n -> 
+              | S_PUSH n ->
                   (match n with
                   | BV.Int _    -> ()
                   | BV.String s -> data#add_const s);
@@ -213,7 +218,7 @@ module Compile =
                              | ">=" -> [X86Cmp (r, lreg); X86Mov (L (BV.Int 0), edx); X86SetGE edx; X86Mov (edx, lreg)]
                              | "==" -> [X86Cmp (r, lreg); X86Mov (L (BV.Int 0), edx); X86SetE edx; X86Mov (edx, lreg)]
                              | "!=" -> [X86Cmp (r, lreg); X86Mov (L (BV.Int 0), edx); X86SetNE edx; X86Mov (edx, lreg)]
-                             | "&&" -> [X86Cmp  (L (BV.Int 0), lreg); 
+                             | "&&" -> [X86Cmp  (L (BV.Int 0), lreg);
                                         X86SetNE eax;
                                         X86Cmp  (L (BV.Int 0), r);
                                         X86SetNE edx;
@@ -246,7 +251,7 @@ module Compile =
               | S_RET   ->
                     let a::stack' = stack in
                     (stack', [X86Mov (a, eax); X86Mov (ebp, esp); X86Pop ebp; X86Ret])
-              | S_FUN (f, a) -> 
+              | S_FUN (f, a) ->
                       List.iter (fun x -> env#arg x) a;
                       (stack, [X86Lbl f])
               | S_CALL f ->
@@ -258,8 +263,7 @@ module Compile =
                     (stack, [X86Pop edi; X86Pop esi; X86Pop ecx])
               | S_ELEM ->
                     let i::a::stack' = stack in
-                    (a::stack', [X86Mov (i, eax); 
-                                 X86Mul (L (BV.of_int 4), eax);
+                    (a::stack', [X86Mov (i, eax);
                                  X86Add (L (BV.of_int 4), eax);
                                  X86Add (a, eax);
                                  X86Mov (A eax, ebx);
@@ -267,7 +271,6 @@ module Compile =
               | S_STA ->
                     let a::i::e::stack' = stack in
                     (stack, [X86Mov (i, eax);
-                             X86Mul (L (BV.of_int 4), eax);
                              X86Mov (a, ebx);
                              X86Add (eax, ebx);
                              X86Add (L (BV.of_int 4), eax);
@@ -282,9 +285,9 @@ module Compile =
 
 let compile stmt =
   let data = new x86data in
-  let codes = List.map 
+  let codes = List.map
                     (fun sp -> let env = new x86env in
-                               let p = Compile.stack_program env data sp in 
+                               let p = Compile.stack_program env data sp in
                                (data, env, p))
                     @@ StackMachine.Compile.stmt stmt in
   let asm  = Buffer.create 1024 in
@@ -304,7 +307,7 @@ let compile stmt =
          !"\tmovl\t%esp,\t%ebp";
          !(Printf.sprintf "\tsubl\t$%d,\t%%esp" ((env#local_n + env#allocated) * word_size))
   in
- 
+
   List.iter (fun (data, env, code) ->
       !(Show.instr data env @@ List.hd code);
       prologue env;
