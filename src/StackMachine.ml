@@ -140,6 +140,15 @@ module Interpreter =
                             | "strsub" ->
                                 let s::i::l::_ = stack in
                                 ((state, (Builtin.strsub s i l)::stack, input, output), code')
+                            | "arrmake" ->
+                                let n::v::_ = stack in
+                                ((state, (Builtin.arrmake n v)::stack, input, output), code')
+                            | "Arrmake" ->
+                                let n::v::_ = stack in
+                                ((state, (Builtin.arrmake n v)::stack, input, output), code')
+                            | "arrlen" ->
+                                let a::_ = stack in
+                                ((state, (Builtin.arrlen a)::stack, input, output), code')
                   )
                in
                run' context code'' total fun_list

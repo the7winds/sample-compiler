@@ -1,7 +1,7 @@
 open Builtin.Value
 module BV = Builtin.Value
 
-type opnd = R of int | S of int | M of string | L of BV.t
+type opnd = R of int | S of int | M of string | L of BV.t | A of opnd
 
 let x86regs = [|
   "%eax";
@@ -113,7 +113,7 @@ module Show =
   struct
 
     let instr data env = 
-        let opnd = function
+        let rec opnd = function
         | R i -> x86regs.(i)
         | S i -> Printf.sprintf "-%d(%%ebp)" ((env#local_n + i) * word_size)
         | M x -> Printf.sprintf "%d(%%ebp)" (env#get_shift x)
@@ -121,7 +121,8 @@ module Show =
             match i with
             | BV.Int d    -> Printf.sprintf "$%d" d
             | BV.String s -> Printf.sprintf "$str%d" (data#get_index s)
-        )
+          )
+        | A o -> Printf.sprintf "(%s)" (opnd o)
         in
         let opndByte = function
         | R i -> x86regsByte.(i)
@@ -255,6 +256,23 @@ module Compile =
                     (stack, [X86Push ecx; X86Push esi; X86Push edi])
               | S_RRESTORE ->
                     (stack, [X86Pop edi; X86Pop esi; X86Pop ecx])
+              | S_ELEM ->
+                    let i::a::stack' = stack in
+                    (a::stack', [X86Mov (i, eax); 
+                                 X86Mul (L (BV.of_int 4), eax);
+                                 X86Add (L (BV.of_int 4), eax);
+                                 X86Add (a, eax);
+                                 X86Mov (A eax, ebx);
+                                 X86Mov (ebx, a)])
+              | S_STA ->
+                    let a::i::e::stack' = stack in
+                    (stack, [X86Mov (i, eax);
+                             X86Mul (L (BV.of_int 4), eax);
+                             X86Mov (a, ebx);
+                             X86Add (eax, ebx);
+                             X86Add (L (BV.of_int 4), eax);
+                             X86Mov (e, edx);
+                             X86Mov (edx, A eax)])
             in
             x86code @ compile stack' code'
       in
@@ -298,6 +316,6 @@ let build stmt name =
   let outf = open_out (Printf.sprintf "%s.s" name) in
   Printf.fprintf outf "%s" (compile stmt);
   close_out outf;
-  match Sys.command (Printf.sprintf "gcc -m32 -o %s $RC_RUNTIME/runtime.o %s.s" name name) with
+  match Sys.command (Printf.sprintf "gcc -m32 -g -o %s $RC_RUNTIME/runtime.o %s.s" name name) with
   | 0 -> ()
   | _ -> failwith "gcc failed with non-zero exit code"
