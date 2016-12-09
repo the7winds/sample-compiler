@@ -44,3 +44,6 @@ let strsub (Value.String b) (Value.Int i) (Value.Int l) = Value.String (Bytes.su
 
 let strget (Value.String b) (Value.Int i) = Value.Int (Char.code (Bytes.get b i))
 
+let arrmake (Value.Int n) v = Value.Array (Array.make n v)
+
+let arrlen (Value.Array a) = Value.Int (Array.length a)

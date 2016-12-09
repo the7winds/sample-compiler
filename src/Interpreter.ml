@@ -171,6 +171,15 @@ module Stmt =
                 | "strsub" ->
                     let s::i::l::_ = args in
                     (Builtin.strsub s i l, input, output)
+                | "arrmake" ->
+                    let n::v::_ = args in
+                    (Builtin.arrmake n v, input, output)
+                | "Arrmake" ->
+                    let n::v::_ = args in
+                    (Builtin.arrmake n v, input, output)
+                | "arrlen" ->
+                    let a::_ = args in
+                    (Builtin.arrlen a, input, output)
     let eval input fun_list =
       let FunDcl (_, _, main_code) = List.hd @@ List.rev fun_list in
       let (Some (BV.Int 0), (_, _, output)) = eval' fun_list (None, ([], input, [])) main_code
