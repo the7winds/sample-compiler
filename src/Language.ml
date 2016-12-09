@@ -85,8 +85,7 @@ module Expr =
             in BV.Array (Array.of_list l)
         };
 
-      idx:
-        "[" n:dec "]" {Const n};
+      idx: -"[" parse -"]";
 
       primary:
         n:dec               {Const n}
