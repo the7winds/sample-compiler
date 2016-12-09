@@ -250,17 +250,25 @@ module Compile =
               )
               | S_RET   ->
                     let a::stack' = stack in
-                    (stack', [X86Mov (a, eax); X86Mov (ebp, esp); X86Pop ebp; X86Ret])
+                    (stack', [X86Mov (a, eax);
+                        (* it restores previous frame stack-registers *)
+                              X86Pop edi;
+                              X86Pop esi;
+                              X86Pop ecx;
+                        (* done *)
+                              X86Mov (ebp, esp);
+                              X86Pop ebp;
+                              X86Ret])
               | S_FUN (f, a) ->
                       List.iter (fun x -> env#arg x) a;
-                      (stack, [X86Lbl f])
+                      (stack, [X86Lbl f;
+                            (* it saves register stack *)
+                               X86Push ecx;
+                               X86Push esi;
+                               X86Push edi])
               | S_CALL f ->
                     let a = allocate env stack in
                     (a::stack, [X86Call f; X86Mov (eax, a)])
-              | S_RSAVE ->
-                    (stack, [X86Push ecx; X86Push esi; X86Push edi])
-              | S_RRESTORE ->
-                    (stack, [X86Pop edi; X86Pop esi; X86Pop ecx])
               | S_ELEM ->
                     let i::a::stack' = stack in
                     (a::stack', [X86Mov (i, eax);

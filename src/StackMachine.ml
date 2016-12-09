@@ -16,8 +16,6 @@ type i =
 | S_END
 | S_FUN   of string * (string list)
 | S_RET
-| S_RSAVE
-| S_RRESTORE
 | S_ELEM
 | S_STA
 
@@ -49,10 +47,6 @@ module Interpreter =
                   | S_PUSH n ->
                     ((state, n::stack, input, output), code')
                   | S_SPUSH ->
-                    ((state, stack, input, output), code')
-                  | S_RRESTORE ->
-                    ((state, stack, input, output), code')
-                  | S_RSAVE ->
                     ((state, stack, input, output), code')
                   | S_POP ->
                     let s::stack' = stack in
@@ -168,7 +162,7 @@ module Compile =
     | Var   x -> [S_LD   x]
     | Const n -> [S_PUSH n]
     | Binop (s, x, y) -> expr x @ expr y @ [S_BINOP s]
-    | Call (f, a)     -> 
+    | Call (f, a)     ->
             (List.concat @@ List.rev @@ List.map (fun x -> (expr x) @ [S_SPUSH]) a) 
             @ [S_CALL f] 
             @ (List.map (fun x -> S_SPOP) a)
