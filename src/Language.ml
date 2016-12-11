@@ -78,7 +78,7 @@ module Expr =
         };
 
       boxed:
-        "{" e:(intArr|str|boxed)? suf:(intArr|str|boxed)* "}" {
+        "{" e:(intArr|str|boxed)? suf:(-"," (intArr|str|boxed))* "}" {
             let l = match e with
                     | Some w -> w::suf
                     | _      -> []

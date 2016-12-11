@@ -84,7 +84,7 @@ class x86env =
                              args_cnt := !args_cnt + 1
 
     method get_shift x = word_size * (if M.mem x !args then M.find x !args
-                                          else -(M.find x !local_vars))
+                                                       else -(M.find x !local_vars))
 
     val    allocated  = ref 0
     method allocate n = allocated := max n !allocated
@@ -102,16 +102,21 @@ let allocate env stack =
 
 class x86data =
   object(self)
-    val    str_cnt = ref 0
-    val    str_idx = ref []
+    val    obj_cnt = ref 0
+    val    obj_idx = ref []
 
-    method add_const s = if ((List.filter (fun (x, _) -> Bytes.equal x s) (!str_idx)) = [])
-                         then   str_cnt := !str_cnt+1;
-                                str_idx := (s, !str_cnt)::(!str_idx);
+    method add_const x =
+        match x with
+        | String s -> obj_cnt := !obj_cnt+1;
+                      obj_idx := (x, !obj_cnt)::(!obj_idx);
+        | Array a  -> Array.iter (self#add_const) a;
+                      obj_cnt := !obj_cnt+1;
+                      obj_idx := (x, !obj_cnt)::(!obj_idx);
+        | _ -> ()
 
-    method get_index s = List.assoc s !str_idx
+    method get_index o = List.assoc o !obj_idx
 
-    method iterate f = List.iter f !str_idx
+    method iterate f = List.iter f !obj_idx
   end
 
 module Show =
@@ -124,8 +129,8 @@ module Show =
         | M x -> Printf.sprintf "%d(%%ebp)" (env#get_shift x)
         | L i -> (
             match i with
-            | BV.Int d    -> Printf.sprintf "$%d" d
-            | BV.String s -> Printf.sprintf "$str%d" (data#get_index s)
+            | BV.Int d -> Printf.sprintf "$%d" d
+            | _        -> Printf.sprintf "$obj%d" (data#get_index i)
           )
         | A o -> Printf.sprintf "(%s)" (opnd o)
         in
@@ -173,9 +178,7 @@ module Compile =
             let (stack', x86code) =
               match i with
               | S_PUSH n ->
-                  (match n with
-                  | BV.Int _    -> ()
-                  | BV.String s -> data#add_const s);
+                  data#add_const n;
                   let s = allocate env stack in
                   (s::stack, [X86Mov (L n, s)])
               | S_SPUSH ->
@@ -304,9 +307,19 @@ let compile stmt =
   let (!)  s = !!s; !!"\n" in
   let datainfo data =
         !".data";
-        data#iterate (fun (s, n) -> !(Printf.sprintf "str%d:" n);
-                                    !(Printf.sprintf "\t.int %d" (Bytes.length s));
-                                    !(Printf.sprintf "\t.ascii \"%s\"" s);)
+        data#iterate (fun (o, n) -> !(Printf.sprintf "obj%d:" n);
+                                    match o with
+                                    | BV.String s ->
+                                        !(Printf.sprintf "\t.int %d" (Bytes.length s));
+                                        !(Printf.sprintf "\t.ascii \"%s\"" s);
+                                    | BV.Array a ->
+                                        !(Printf.sprintf "\t.int %d" (Array.length a));
+                                        Array.iter (
+                                            fun x -> match x with
+                                                     | BV.Int d -> !(Printf.sprintf "\t.int %d" d)
+                                                     | _ -> !(Printf.sprintf "\t.int obj%d" (data#get_index x))
+                                        ) a;
+        )
   in
   datainfo data;
   !"\t.text";
