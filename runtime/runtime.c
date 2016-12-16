@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define min(a, b) \
             ((a) < (b) ? (a) : (b))
@@ -14,7 +15,7 @@ typedef struct {
     int data[0];
 } seq_t;
 
-extern int read()
+extern int _read()
 {
     int d;
     printf("> ");
@@ -22,12 +23,12 @@ extern int read()
     return d;
 }
 
-extern void write(int x)
+extern void _write(int x)
 {
     printf("%d\n", x);
 }
 
-extern str_t* strmake(int n, int c)
+extern str_t* _strmake(int n, int c)
 {
     str_t* str = malloc(sizeof(str->tag) + n);
     str->tag = n;
@@ -35,18 +36,18 @@ extern str_t* strmake(int n, int c)
     return str;
 }
 
-extern str_t* strset(str_t* str, int i, int c)
+extern str_t* _strset(str_t* str, int i, int c)
 {
     str->data[i] = c;
     return str;
 }
 
-extern int strget(str_t* str, int i)
+extern int _strget(str_t* str, int i)
 {
     return str->data[i];
 }
 
-extern str_t* strdup(str_t* str)
+extern str_t* _strdup(str_t* str)
 {
     int l = sizeof(str->tag) + str->tag;
     str_t* dup = malloc(l);
@@ -54,7 +55,7 @@ extern str_t* strdup(str_t* str)
     return dup;
 }
 
-extern str_t* strcat(str_t* a, str_t* b)
+extern str_t* _strcat(str_t* a, str_t* b)
 {
     str_t* ab = malloc(sizeof(ab->tag) + a->tag + b->tag);
     ab->tag = a->tag + b->tag;
@@ -63,7 +64,7 @@ extern str_t* strcat(str_t* a, str_t* b)
     return ab;
 }
 
-extern int strcmp(str_t* s1, str_t* s2)
+extern int _strcmp(str_t* s1, str_t* s2)
 {
     int i = 0;
     while (i < min(s1->tag, s2->tag) && s1->data[i] == s2->data[i]) {
@@ -81,12 +82,12 @@ extern int strcmp(str_t* s1, str_t* s2)
     return (s1->data[i] < s2->data[i] ? -1 : 1);
 }
 
-extern int strlen(str_t* s)
+extern int _strlen(str_t* s)
 {
     return s->tag;
 }
 
-extern str_t* strsub(str_t* s, int i, int l)
+extern str_t* _strsub(str_t* s, int i, int l)
 {
     str_t* r = malloc(sizeof(r->tag) + l);
     r->tag = l;
@@ -94,22 +95,22 @@ extern str_t* strsub(str_t* s, int i, int l)
     return r;
 }
 
-extern seq_t* arrmake(int n, int v)
+extern seq_t* _arrmake(int n, int v)
 {
-    str_t* str = malloc(sizeof(str->tag) + n);
-    str->tag = n;
+    seq_t* arr = malloc(sizeof(arr->tag) + n * sizeof(int));
+    arr->tag = n;
     for (int i = 0; i < n; ++i) {
-        str->data[i] = v;
+        arr->data[i] = v;
     }
-    return str;
+    return arr;
 }
 
-extern seq_t* Arrmake(int n, int v)
+extern seq_t* _Arrmake(int n, int v)
 {
-    return arrmake(n, v);
+    return _arrmake(n, v);
 }
 
-extern int arrlen(str_t* arr)
+extern int _arrlen(str_t* arr)
 {
     return arr->tag;
 }

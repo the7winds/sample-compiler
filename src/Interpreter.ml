@@ -142,42 +142,42 @@ module Stmt =
         ) with
           | Not_found ->
                 match f with
-                | "read"  ->
+                | "_read"  ->
                     Builtin.read input output
-                | "write" -> 
+                | "_write" -> 
                     let x::_ = args in
                     Builtin.write x input output
-                | "strmake" ->
+                | "_strmake" ->
                     let n::x::_ = args in
                     (Builtin.strmake n x, input, output)
-                | "strset" ->
+                | "_strset" ->
                     let s::i::c::_ = args in
                     (Builtin.strset s i c, input, output) 
-                | "strget" ->
+                | "_strget" ->
                     let s::i::_ = args in
                     (Builtin.strget s i, input, output)
-                | "strdup" ->
+                | "_strdup" ->
                     let s::_ = args in
                     (Builtin.strdup s, input, output)
-                | "strcat" ->
+                | "_strcat" ->
                     let s1::s2::_ = args in
                     (Builtin.strcat s1 s2, input, output)
-                | "strcmp" ->
+                | "_strcmp" ->
                     let s1::s2::_ = args in
                     (Builtin.strcmp s1 s2, input, output)
-                | "strlen" ->
+                | "_strlen" ->
                     let s::_ = args in
                     (Builtin.strlen s, input, output)
-                | "strsub" ->
+                | "_strsub" ->
                     let s::i::l::_ = args in
                     (Builtin.strsub s i l, input, output)
-                | "arrmake" ->
+                | "_arrmake" ->
                     let n::v::_ = args in
                     (Builtin.arrmake n v, input, output)
-                | "Arrmake" ->
+                | "_Arrmake" ->
                     let n::v::_ = args in
                     (Builtin.arrmake n v, input, output)
-                | "arrlen" ->
+                | "_arrlen" ->
                     let a::_ = args in
                     (Builtin.arrlen a, input, output)
     let eval input fun_list =

@@ -93,7 +93,7 @@ module Expr =
       | a:(intArr|boxed)    {Const a}
       | x:IDENT a:(-"(" args -")")? i:(idx)* {
           match a with
-          | Some t -> Call (x, t)
+          | Some t -> Call (String.concat "" ["_"; x], t)
           | _      ->
                 match i with
                 | [] -> Var x
@@ -140,7 +140,7 @@ module Stmt =
         %"fun" f:IDENT "(" a:args ")"
         %"begin"
                s:main
-        %"end"                           {FunDcl (f, a, s)};
+        %"end"                           {FunDcl ((String.concat "" ["_"; f]), a, s)};
 
       simple:
         x:!(Expr.parse) ":=" e:!(Expr.parse) {Assign (x, e)}
