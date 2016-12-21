@@ -33,12 +33,13 @@ module Expr =
                | "<"  -> l <  r
                | ">"  -> l >  r
            )
-
     )
 
     let rec eval fun_list state eval_fun_call g input output = function 
     | Const  n -> (n, g, input, output)
-    | Var    x -> (state x, g, input, output)
+    | Var    x ->
+        let el = if (List.mem_assoc x g) then List.assoc x g else state x in
+        (el, g, input, output)
     | Binop (o, l, r) ->
         let (lv, g', input', output')   = eval fun_list state eval_fun_call g input  output  l in
         let (rv, g'', input'', output'') = eval fun_list state eval_fun_call g' input' output' r in
@@ -54,7 +55,7 @@ module Expr =
         let (args, g', input', output') = getArgs a g input output in
         eval_fun_call fun_list f args g' input' output'
     | Access (a, i) ->
-        let el = if (List.mem_assoc a g) then List.assoc a g else state a  in
+        let el = if (List.mem_assoc a g) then List.assoc a g else state a in
         match i with
         | [] -> (el, g, input, output)
         | _  ->
