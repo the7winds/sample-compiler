@@ -36,38 +36,35 @@ module Expr =
 
     )
 
-    let rec eval fun_list state eval_fun_call input output = function 
-    | Const  n -> (n, input, output)
-    | Var    x -> (state x, input, output)
+    let rec eval fun_list state eval_fun_call g input output = function 
+    | Const  n -> (n, g, input, output)
+    | Var    x -> (state x, g, input, output)
     | Binop (o, l, r) ->
-        let (lv, input', output')   = eval fun_list state eval_fun_call input  output  l in
-        let (rv, input'', output'') = eval fun_list state eval_fun_call input' output' r in
-        (evalBinOp o lv rv, input'', output'')
+        let (lv, g', input', output')   = eval fun_list state eval_fun_call g input  output  l in
+        let (rv, g'', input'', output'') = eval fun_list state eval_fun_call g' input' output' r in
+        (evalBinOp o lv rv, g'', input'', output'')
     | Call  (f, a) ->
-        let rec getArgs a input output =
+        let rec getArgs a g input output =
             match a with
-            | []    -> ([], input, output)
-            | x::xs -> let (v, i, o)   = eval fun_list state eval_fun_call input output x in
-                       let (t, i', o') = getArgs xs i o in
-                       (v::t, i', o')
+            | []    -> ([], g, input, output)
+            | x::xs -> let (v, g', i, o)   = eval fun_list state eval_fun_call g input output x in
+                       let (t, g'', i', o') = getArgs xs g' i o in
+                       (v::t, g'', i', o')
         in
-        let (args, input', output') = getArgs a input output in
-        eval_fun_call fun_list f args input' output'
+        let (args, g', input', output') = getArgs a g input output in
+        eval_fun_call fun_list f args g' input' output'
     | Access (a, i) ->
+        let el = if (List.mem_assoc a g) then List.assoc a g else state a  in
         match i with
-        | [] -> (state a, input, output)
+        | [] -> (el, g, input, output)
         | _  ->
-            let (i', input', output') = 
+            let (i', g', input', output') = 
                 List.fold_left (
-                    fun (_i, _in, _out) x -> 
-                        let (_i', _in', _out') = eval fun_list state eval_fun_call _in _out x
-                        in (_i@[_i'], _in', _out')
-                ) ([], input, output) i in
-            (List.fold_left (
-                fun ar x -> 
-                    Array.get (BV.of_array ar) (BV.to_int x)
-                )
-             (state a) i', input', output')
+                    fun (_i, _g, _in, _out) x -> 
+                        let (_i', _g', _in', _out') = eval fun_list state eval_fun_call _g _in _out x
+                        in (_i@[_i'], _g', _in', _out')
+                ) ([], g, input, output) i in
+            (List.fold_left (fun ar x -> Array.get (BV.of_array ar) (BV.to_int x)) el i', g', input', output')
   end
 
 module Stmt =
@@ -79,7 +76,7 @@ module Stmt =
 
     module BV = Builtin.Value
 
-    let rec eval' fun_list ((None, (state, input, output)) as c) stmt =
+    let rec eval' fun_list ((None, (g, state, input, output)) as c) stmt =
       (* Printf.eprintf "HELLO eval\n"; *)
       let state' x = List.assoc x state in
       match stmt with
@@ -93,31 +90,34 @@ module Stmt =
             (*Printf.eprintf "HELLO assign %s\n" x;*)
                 match x with
                 | Language.Expr.Var x ->
-                    let (v, input', output') =
-                        Expr.eval fun_list state' eval_fun_call input output e in
-                    (None, ((x, v)::state, input', output'))
+                    let (v, g', input', output') =
+                        Expr.eval fun_list state' eval_fun_call g input output e in
+                    if (List.mem_assoc x g') then
+                        (None, ((x, v)::g', state, input', output'))
+                    else
+                        (None, (g', (x, v)::state, input', output'))
                 | Language.Expr.Access (x', idxs) ->
-                    let (v, i, o) = Expr.eval fun_list state' eval_fun_call input output e in
+                    let (v, g', i, o) = Expr.eval fun_list state' eval_fun_call g input output e in
                     let idx::ridxs = List.rev idxs in
-                    let (vi, i', o') = Expr.eval fun_list state' eval_fun_call i o idx in
-                    let (va, i'', o'') = Expr.eval fun_list state' eval_fun_call i' o' (Language.Expr.Access (x', (List.rev ridxs))) in
+                    let (vi, g'', i', o') = Expr.eval fun_list state' eval_fun_call g' i o idx in
+                    let (va, g2', i'', o'') = Expr.eval fun_list state' eval_fun_call g'' i' o' (Language.Expr.Access (x', (List.rev ridxs))) in
                     let _ = Array.set (BV.of_array va) (BV.to_int vi) v in
-                    (None, (state, i'', o''))
+                    (None, (g2', state, i'', o''))
                 (*Printf.eprintf "%s = %d\n" x (BV.to_int v);*)
         )
       | IfElse (e, s1, s2) ->
-            let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
-            eval' fun_list (None, (state, input', output')) (if (BV.to_int v) <> 0 then s1 else s2)
+            let (v, g', input', output') = Expr.eval fun_list state' eval_fun_call g input output e in
+            eval' fun_list (None, (g', state, input', output')) (if (BV.to_int v) <> 0 then s1 else s2)
       | While (e, s) -> (
-            let rec evalWhile e s (None, (state, input, output) as c) =
+            let rec evalWhile e s (None, (g, state, input, output) as c) =
                 let state' x = List.assoc x state in
-                let (cond, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
+                let (cond, g', input', output') = Expr.eval fun_list state' eval_fun_call g input output e in
                 match (cond) with
-                | (BV.Int 0) -> (None, (state, input', output'))
-                | _          -> let c' = eval' fun_list c s in
+                | (BV.Int 0) -> (None, (g', state, input', output'))
+                | _          -> let c' = eval' fun_list c s in (* ?????? WHY c not (g', input', output') ????? *)
                                 match c' with
                                 | (Some v, _) -> c'
-                                | (None, _)   -> evalWhile e s c'
+                                | (None,   _) -> evalWhile e s c'
             in
             evalWhile e s c
         )
@@ -125,64 +125,76 @@ module Stmt =
             (*Printf.eprintf "HELLO fun declare %s\n" f;*)
             c
       | Return e         ->
-            let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
-            (Some v, (state, input', output'))
+            let (v, g', input', output') = Expr.eval fun_list state' eval_fun_call g input output e in
+            (Some v, (g', state, input', output'))
       | ExprSt e         ->
             (*Printf.eprintf "HELLO expr st\n";*)
-            let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
-            (None, (state, input', output'))
+            let (v, g', input', output') = Expr.eval fun_list state' eval_fun_call g input output e in
+            (None, (g', state, input', output'))
 
-    and eval_fun_call fun_list f args input output =
+    and eval_fun_call fun_list f args g input output =
         (*Printf.eprintf "HELLO fun call %s\n" f;*)
         try (
           let FunDcl (_, args', stmt) = List.find (fun (FunDcl (f', _, _)) -> f' = f) fun_list in
           let state = List.combine args' args in
-          let (r, (_, i, o)) = eval' fun_list (None, (state, input, output)) stmt in
-          let Some v = r in (v, i, o)
+          let (r, (g', _, i, o)) = eval' fun_list (None, (g, state, input, output)) stmt in
+          let Some v = r in (v, g', i, o)
         ) with
           | Not_found ->
                 match f with
                 | "_read"  ->
-                    Builtin.read input output
+                    let x::input' = input in
+                    (x, g, input', output)
                 | "_write" -> 
                     let x::_ = args in
-                    Builtin.write x input output
-                | "_strmake" ->
-                    let n::x::_ = args in
-                    (Builtin.strmake n x, input, output)
-                | "_strset" ->
-                    let s::i::c::_ = args in
-                    (Builtin.strset s i c, input, output) 
-                | "_strget" ->
-                    let s::i::_ = args in
-                    (Builtin.strget s i, input, output)
-                | "_strdup" ->
-                    let s::_ = args in
-                    (Builtin.strdup s, input, output)
-                | "_strcat" ->
-                    let s1::s2::_ = args in
-                    (Builtin.strcat s1 s2, input, output)
-                | "_strcmp" ->
-                    let s1::s2::_ = args in
-                    (Builtin.strcmp s1 s2, input, output)
-                | "_strlen" ->
-                    let s::_ = args in
-                    (Builtin.strlen s, input, output)
-                | "_strsub" ->
-                    let s::i::l::_ = args in
-                    (Builtin.strsub s i l, input, output)
-                | "_arrmake" ->
-                    let n::v::_ = args in
-                    (Builtin.arrmake n v, input, output)
-                | "_Arrmake" ->
-                    let n::v::_ = args in
-                    (Builtin.arrmake n v, input, output)
-                | "_arrlen" ->
-                    let a::_ = args in
-                    (Builtin.arrlen a, input, output)
-    let eval input fun_list =
-      let FunDcl (_, _, main_code) = List.hd @@ List.rev fun_list in
-      let (Some (BV.Int 0), (_, _, output)) = eval' fun_list (None, ([], input, [])) main_code
+                    (BV.Int 0, g, input, output@[x])
+                | f' -> (
+                  (
+                    match f' with
+                    | "_strmake" ->
+                        let n::x::_ = args in
+                        Builtin.strmake n x
+                    | "_strset" ->
+                        let s::i::c::_ = args in
+                        Builtin.strset s i c
+                    | "_strget" ->
+                        let s::i::_ = args in
+                        Builtin.strget s i
+                    | "_strdup" ->
+                        let s::_ = args in
+                        Builtin.strdup s
+                    | "_strcat" ->
+                        let s1::s2::_ = args in
+                        Builtin.strcat s1 s2
+                    | "_strcmp" ->
+                        let s1::s2::_ = args in
+                        Builtin.strcmp s1 s2
+                    | "_strlen" ->
+                        let s::_ = args in
+                        Builtin.strlen s
+                    | "_strsub" ->
+                        let s::i::l::_ = args in
+                        Builtin.strsub s i l
+                    | "_arrmake" ->
+                        let n::v::_ = args in
+                        Builtin.arrmake n v
+                    | "_Arrmake" ->
+                        let n::v::_ = args in
+                        Builtin.arrmake n v
+                    | "_arrlen" ->
+                        let a::_ = args in
+                        Builtin.arrlen a
+                   )
+                    , g, input, output)
+    let eval input gdecls_funs_list =
+      let (g', funs) = List.partition (fun x ->
+                                        match x with
+                                        | GDecl _ -> true
+                                        | _       -> false) gdecls_funs_list
+      in
+      let g = List.map (fun (GDecl x) -> (x, BV.Int 0)) g' in
+      let FunDcl (_, _, main_code) = List.hd @@ List.rev funs in
+      let (Some (BV.Int 0), (_, _, _, output)) = eval' funs (None, (g, [], input, [])) main_code
       in output
 
   end

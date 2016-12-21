@@ -22,9 +22,7 @@ module Value =
                  take (Array.get (of_array a) (to_int i)) idx'
   end
 
-let read (x::input') output = (x, input', output)
-
-let write x input output = (Value.Int 0, input, output@[x])
+let read x::input' = x
 
 let strmake (Value.Int n) (Value.Int c) = Value.String (Bytes.make n (Char.chr c))
 
