@@ -1,0 +1,11 @@
+global x
+
+fun foo()
+begin
+    x := 1;
+    return 0
+end
+
+write(x);
+foo();
+write(x)

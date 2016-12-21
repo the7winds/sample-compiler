@@ -1,0 +1,16 @@
+global x
+
+fun fib(n)
+begin
+    x := x + 1;
+    if (n == 0) then 
+        return 1
+    elif (n == 1) then
+        return 1
+    fi;
+    return fib(n-1) + fib(n-2)
+end
+
+write(x);
+fib(5);
+write(x)
