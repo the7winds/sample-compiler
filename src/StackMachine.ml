@@ -18,6 +18,7 @@ type i =
 | S_RET
 | S_ELEM
 | S_STA
+| S_GDECL of string
 
 
 module Interpreter =
@@ -26,13 +27,13 @@ module Interpreter =
     open Interpreter.Expr
 
     let run input code =
-      let rec run' (state, stack, input, output) code total fun_list =
+      let rec run' (g, state, stack, input, output) code total fun_list =
           (*Printf.printf "STATE SZ %d\n" (List.length state);*)
        match code with
-       | []       -> (BV.Int 0, input, output)
+       | []       -> (BV.Int 0, g, input, output)
        | i::code' ->
             if i = S_RET
-            then let s::stack' = stack in (s, input, output)
+            then let s::stack' = stack in (s, g, input, output)
             else
                let (context, code'') =
                   let rec getLblCode s code =
@@ -45,34 +46,34 @@ module Interpreter =
                   in
                   (match i with
                   | S_PUSH n ->
-                    ((state, n::stack, input, output), code')
+                    ((g, state, n::stack, input, output), code')
                   | S_SPUSH ->
-                    ((state, stack, input, output), code')
+                    ((g, state, stack, input, output), code')
                   | S_POP ->
                     let s::stack' = stack in
-                    ((state, stack', input, output), code')
+                    ((g, state, stack', input, output), code')
                   | S_SPOP ->
                     let r::_::stack' = stack in
-                    ((state, r::stack', input, output), code')
+                    ((g, state, r::stack', input, output), code')
                   | S_LD x ->
                     (*Printf.printf "HERE! %s\n" x;*)
-                    ((state, (List.assoc x state)::stack, input, output), code')
+                    ((g, state, (List.assoc x state)::stack, input, output), code')
                   | S_ST x ->
                     let y::stack' = stack in
-                    (((x, y)::state, stack', input, output), code')
+                    ((g, (x, y)::state, stack', input, output), code')
                   | S_BINOP s ->
                     let r::l::stack' = stack in
-                    ((state, (Interpreter.Expr.evalBinOp s l r)::stack', input, output), code')
+                    ((g, state, (Interpreter.Expr.evalBinOp s l r)::stack', input, output), code')
                   | S_LBL s ->
                     (*Printf.printf "LBL %s\n" s; *)
-                    ((state, stack, input, output), code')
+                    ((g, state, stack, input, output), code')
                   | S_JMP s ->
                     (*Printf.printf "JMP %s\n" s; *)
-                    ((state, stack, input, output), getLblCode s total)
+                    ((g, state, stack, input, output), getLblCode s total)
                   | S_CJMP (c, s) ->
                     (*Printf.printf "CJMP %s\n" s; *)
                     let a::stack' = stack in
-                    ((state, stack', input, output),
+                    ((g, state, stack', input, output),
                         if (match c with
                             | "NZ" -> (BV.to_int a) <> 0
                             | "Z"  -> (BV.to_int a) =  0
@@ -80,11 +81,11 @@ module Interpreter =
                                                                 else code')
                   | S_ELEM ->
                     let n::a::stack' = stack in
-                    ((state, (Array.get (BV.of_array a) (BV.to_int n))::stack', input, output), code')
+                    ((g, state, (Array.get (BV.of_array a) (BV.to_int n))::stack', input, output), code')
                   | S_STA ->
                     let i::a::v::stack' = stack in
                     let _ = Array.set (BV.of_array a) (BV.to_int i) v in
-                    ((state, stack', input, output), code')
+                    ((g, state, stack', input, output), code')
                   | S_FUN (s, a) ->
                     (*Printf.printf "ARGS: %s\n" (String.concat " " a);*)
                     let rec prepareState stack ar =
@@ -93,62 +94,71 @@ module Interpreter =
                         | a::ar' -> let x::stack' = stack in
                                     (a, x)::prepareState stack' ar'
                     in
-                    ((prepareState stack a, stack, input, output), code')
+                    ((g, prepareState stack a, stack, input, output), code')
                   | S_CALL s ->
                     (*Printf.printf "CALL %s\n" s;*)
                     try (
                         let ((S_FUN (f, _))::_ as fcode) = List.find (fun ((S_FUN (f, _)::_)) -> f = s) fun_list in
-                        let (r, i, o) = run' ([], stack, input, output) fcode fcode fun_list in
-                        ((state, r::stack, i, o), code')
+                        let (r, g, i, o) = run' (g, [], stack, input, output) fcode fcode fun_list in
+                        ((g, state, r::stack, i, o), code')
                     ) with 
                       | Not_found -> 
                             match s with
                             | "_read"  -> 
-                                let (r, i, o) = Builtin.read input output in
-                                ((state, r::stack, i, o), code')
+                                let x::input' = input in
+                                ((g, state, x::stack, input', output), code')
                             | "_write" ->
                                 let x::_ = stack in
-                                let (r, i, o) = Builtin.write x input output in
-                                ((state, r::stack, i, o), code')
-                            | "_strmake" ->
-                                let n::x::_ = stack in
-                                ((state, (Builtin.strmake n x)::stack, input, output), code')
-                            | "_strset" ->
-                                let s::i::c::_ = stack in
-                                ((state, (Builtin.strset s i c)::stack, input, output), code')
-                            | "_strget" ->
-                                let s::i::_ = stack in
-                                ((state, (Builtin.strget s i)::stack, input, output), code')
-                            | "_strdup" ->
-                                let s::_ = stack in
-                                ((state, (Builtin.strdup s)::stack, input, output), code')
-                            | "_strcat" ->
-                                let s1::s2::_ = stack in
-                                ((state, (Builtin.strcat s1 s2)::stack, input, output), code')
-                            | "_strcmp" ->
-                                let s1::s2::_ = stack in
-                                ((state, (Builtin.strcmp s1 s2)::stack, input, output), code')
-                            | "_strlen" ->
-                                let s::_ = stack in
-                                ((state, (Builtin.strlen s)::stack, input, output), code')
-                            | "_strsub" ->
-                                let s::i::l::_ = stack in
-                                ((state, (Builtin.strsub s i l)::stack, input, output), code')
-                            | "_arrmake" ->
-                                let n::v::_ = stack in
-                                ((state, (Builtin.arrmake n v)::stack, input, output), code')
-                            | "_Arrmake" ->
-                                let n::v::_ = stack in
-                                ((state, (Builtin.arrmake n v)::stack, input, output), code')
-                            | "_arrlen" ->
-                                let a::_ = stack in
-                                ((state, (Builtin.arrlen a)::stack, input, output), code')
+                                ((g, state, (BV.Int 0)::stack, input, output@[x]), code')
+                            | _ -> (
+                                ((g, state, (
+                                    match s with
+                                    | "_strmake" ->
+                                        let n::x::_ = stack in
+                                        (Builtin.strmake n x)::stack
+                                    | "_strset" ->
+                                        let s::i::c::_ = stack in
+                                        (Builtin.strset s i c)::stack
+                                    | "_strget" ->
+                                        let s::i::_ = stack in
+                                        (Builtin.strget s i)::stack
+                                    | "_strdup" ->
+                                        let s::_ = stack in
+                                        (Builtin.strdup s)::stack
+                                    | "_strcat" ->
+                                        let s1::s2::_ = stack in
+                                        (Builtin.strcat s1 s2)::stack
+                                    | "_strcmp" ->
+                                        let s1::s2::_ = stack in
+                                        (Builtin.strcmp s1 s2)::stack
+                                    | "_strlen" ->
+                                        let s::_ = stack in
+                                        (Builtin.strlen s)::stack
+                                    | "_strsub" ->
+                                        let s::i::l::_ = stack in
+                                        (Builtin.strsub s i l)::stack
+                                    | "_arrmake" ->
+                                        let n::v::_ = stack in
+                                        (Builtin.arrmake n v)::stack
+                                    | "_Arrmake" ->
+                                        let n::v::_ = stack in
+                                        (Builtin.arrmake n v)::stack
+                                    | "_arrlen" ->
+                                        let a::_ = stack in
+                                        (Builtin.arrlen a)::stack)
+                                , input, output), code')
+                            )
                   )
                in
                run' context code'' total fun_list
       in
-      let main_code = List.hd @@ List.rev code in
-      let (_, _, o) = run' ([], [], input, []) main_code main_code code in o
+      let (g', code') = List.partition (fun x ->
+                                            match x with
+                                            | [S_GDECL _] -> true
+                                            | _           -> false) code in
+      let g = List.map (fun ([S_GDECL x]) -> (x, BV.Int 0)) g' in
+      let main_code = List.hd @@ List.rev code' in
+      let (_, _, _, o) = run' (g, [], [], input, []) main_code main_code code' in o
 
   end
 
@@ -202,12 +212,13 @@ module Compile =
                 (expr e @ [S_RET], lbl)
             | ExprSt e ->
                 (expr e @ [S_POP], lbl)
+            | GDecl x  ->
+                ([S_GDECL x], lbl)
         in
         let rec stmt'' s n =
             match s with
             | [] -> []
-            | f::fs -> let (fc, n') = stmt' f n in
-                       (fc::stmt'' fs n')
+            | f::fs -> let (fc, n') = stmt' f n in (fc::stmt'' fs n')
         in stmt'' s 0
         (*Printf.printf "%s\n" (String.concat "\n" @@ List.map
             (fun x -> match x with
