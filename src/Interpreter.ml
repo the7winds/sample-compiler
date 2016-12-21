@@ -124,7 +124,7 @@ module Stmt =
       | FunDcl (f, a, s) ->
             (*Printf.eprintf "HELLO fun declare %s\n" f;*)
             c
-      | Return (e)       ->
+      | Return e         ->
             let (v, input', output') = Expr.eval fun_list state' eval_fun_call input output e in
             (Some v, (state, input', output'))
       | ExprSt e         ->

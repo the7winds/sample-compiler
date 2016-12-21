@@ -8,7 +8,7 @@ let parse infile =
   Util.parse
     (object
        inherit Matcher.t s
-       inherit Util.Lexers.ident ["skip"] s
+       inherit Util.Lexers.ident ["skip"; "if"; "then"; "else"; "for"; "fi"; "do"; "od"] s
        inherit Util.Lexers.decimal s
        inherit Util.Lexers.string s
        inherit Util.Lexers.char s
