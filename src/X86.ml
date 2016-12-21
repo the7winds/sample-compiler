@@ -69,14 +69,23 @@ module M = Map.Make (String)
 
 class x86env =
   object(self)
+    val    glb = ref []
     val    local_vars = ref M.empty
     val    local_cnt  = ref 0
     val    args       = ref M.empty
     val    args_cnt   = ref 1
 
-    method local x    = if not (M.mem x !local_vars) && not (M.mem x !args)
+
+    method is_global x = List.mem x !glb
+
+    method set_global g = glb := g
+
+    method local x =
+        if not (List.mem x !glb) then
+            if not (M.mem x !local_vars) && not (M.mem x !args)
                         then local_vars := M.add x (!local_cnt + 1) !local_vars;
                              local_cnt := !local_cnt + 1;
+
     method local_n    = !local_cnt
 
     method arg x      = if not (M.mem x !local_vars) && not (M.mem x !args)
@@ -126,7 +135,10 @@ module Show =
         let rec opnd = function
         | R i -> x86regs.(i)
         | S i -> Printf.sprintf "-%d(%%ebp)" ((env#local_n + i) * word_size)
-        | M x -> Printf.sprintf "%d(%%ebp)" (env#get_shift x)
+        | M x -> if (env#is_global x) then
+                    Printf.sprintf "%s" x
+                 else
+                    Printf.sprintf "%d(%%ebp)" (env#get_shift x)
         | L i -> (
             match i with
             | BV.Int d -> Printf.sprintf "$%d" d
@@ -297,14 +309,24 @@ module Compile =
 
 let compile stmt =
   let data = new x86data in
+  let stackcode' = StackMachine.Compile.stmt stmt in
+  let (global', stackcode) = List.partition (fun x -> match x with
+                                                      | [StackMachine.S_GDECL _] -> true
+                                                      | _ -> false) stackcode' in
+  let global = List.map (fun [StackMachine.S_GDECL x] -> x) global' in
   let codes = List.map
                     (fun sp -> let env = new x86env in
+                               env#set_global global;
                                let p = Compile.stack_program env data sp in
                                (data, env, p))
-                    @@ StackMachine.Compile.stmt stmt in
+                    @@ stackcode in
   let asm  = Buffer.create 1024 in
   let (!!) s = Buffer.add_string asm s in
   let (!)  s = !!s; !!"\n" in
+  let globalinfo g =
+        !".bss";
+        List.iter (fun x -> !(Printf.sprintf "%s:\n\t.int" x);) g
+  in
   let datainfo data =
         !".data";
         data#iterate (fun (o, n) -> !(Printf.sprintf "obj%d:" n);
@@ -321,6 +343,7 @@ let compile stmt =
                                         ) a;
         )
   in
+  globalinfo global;
   datainfo data;
   !"\t.text";
   !"\t.globl\tmain";
