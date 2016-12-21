@@ -149,9 +149,9 @@ module Stmt =
                 | "_write" -> 
                     let x::_ = args in
                     (BV.Int 0, g, input, output@[x])
-                | f' -> (
+                | _ -> (
                   (
-                    match f' with
+                    match f with
                     | "_strmake" ->
                         let n::x::_ = args in
                         Builtin.strmake n x
