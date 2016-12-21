@@ -119,11 +119,15 @@ module Stmt =
     | FunDcl of string * string list * t
     | Return of Expr.t
     | ExprSt of Expr.t
+    | GDecl  of string
 
     ostap (
-      parse: f:(func)* m:main {
-        f@[FunDcl ("main", [], Seq (m, Return (Const (BV.Int 0))))]
+      parse: g:(gvar)* f:(func)* m:main {
+        g@f@[FunDcl ("main", [], Seq (m, Return (Const (BV.Int 0))))]
       };
+
+      gvar:
+        %"global" x:IDENT {GDecl x};
 
       main: s:simple d:(-";" main)? {
         match d with None -> s | Some d -> Seq (s, d)
