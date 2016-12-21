@@ -57,10 +57,16 @@ module Interpreter =
                     ((g, state, r::stack', input, output), code')
                   | S_LD x ->
                     (*Printf.printf "HERE! %s\n" x;*)
-                    ((g, state, (List.assoc x state)::stack, input, output), code')
+                    let el =
+                        if (List.mem_assoc x g) then List.assoc x g
+                                                else List.assoc x state in
+                    ((g, state, el::stack, input, output), code')
                   | S_ST x ->
                     let y::stack' = stack in
-                    ((g, (x, y)::state, stack', input, output), code')
+                    if (List.mem_assoc x g) then
+                        (((x, y)::g, state, stack', input, output), code')
+                    else
+                        ((g, (x, y)::state, stack', input, output), code')
                   | S_BINOP s ->
                     let r::l::stack' = stack in
                     ((g, state, (Interpreter.Expr.evalBinOp s l r)::stack', input, output), code')
