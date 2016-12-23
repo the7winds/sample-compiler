@@ -325,7 +325,7 @@ let compile stmt =
   let (!)  s = !!s; !!"\n" in
   let globalinfo g =
         !".bss";
-        List.iter (fun x -> !(Printf.sprintf "%s:\n\t.int" x);) g
+        List.iter (fun x -> !(Printf.sprintf "%s:\n\t.skip %d" x word_size);) g
   in
   let datainfo data =
         !".data";
