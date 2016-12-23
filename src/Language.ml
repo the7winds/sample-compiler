@@ -123,11 +123,11 @@ module Stmt =
 
     ostap (
       parse: g:(gvar)* f:(func)* m:main {
-        g@f@[FunDcl ("main", [], Seq (m, Return (Const (BV.Int 0))))]
+        (List.map (fun x -> GDecl x) (List.concat g))@f@[FunDcl ("main", [], Seq (m, Return (Const (BV.Int 0))))]
       };
 
       gvar:
-        %"global" x:IDENT {GDecl x};
+        %"global" a:args ";" {a};
 
       main: s:simple d:(-";" main)? {
         match d with None -> s | Some d -> Seq (s, d)
