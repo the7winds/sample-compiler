@@ -1,4 +1,4 @@
-TESTS=test001 test002 test003
+TESTS=test001 test002 test003 test004
 
 .PHONY: check $(TESTS) 
 

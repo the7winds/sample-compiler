@@ -1,4 +1,4 @@
-global x
+global x;
 
 fun f1(n)
 begin

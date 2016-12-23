@@ -1,0 +1,26 @@
+global x, y;
+global z;
+
+
+fun f1()
+begin
+    x := read();
+    return 0
+end
+
+fun f2()
+begin
+    y := read();
+    return 0
+end
+
+fun f3()
+begin
+    z := read();
+    return 0
+end
+
+f1();
+f2();
+f3();
+write(x + y + z)
