@@ -47,13 +47,6 @@ module Expr =
         }
       | primary;
 
-      args:
-        e:(parse)? suf:(-"," parse)* {
-            match e with
-            | Some w -> w::suf
-            | _      -> []
-        };
-
       str:
         s:STRING {
             let b = Bytes.of_string s in
@@ -65,15 +58,8 @@ module Expr =
       dec:
         n:DECIMAL {BV.Int n};
 
-      seqInt:
-        e:(dec)? suf:(-"," dec)* {
-            match e with
-            | Some w -> w::suf
-            | _      -> []
-        };
-
       intArr:
-        "[" a:seqInt "]" {
+        "[" a:!(Util.list0 dec) "]" {
             BV.Array (Array.of_list a)
         };
 
@@ -91,7 +77,7 @@ module Expr =
         n:dec               {Const n}
       | s:str               {Const s}
       | a:(intArr|boxed)    {Const a}
-      | x:IDENT a:(-"(" args -")")? i:(idx)* {
+      | x:IDENT a:(-"(" !(Util.list0 parse) -")")? i:(idx)* {
           match a with
           | Some t -> Call (String.concat "" ["_"; x], t)
           | _      ->
@@ -126,22 +112,17 @@ module Stmt =
         (List.map (fun x -> GDecl x) (List.concat g))@f@[FunDcl ("main", [], Seq (m, Return (Const (BV.Int 0))))]
       };
 
+      ident: IDENT;
+
       gvar:
-        %"global" a:args ";" {a};
+        %"global" a:!(Util.list0 ident)";" {a};
 
       main: s:simple d:(-";" main)? {
         match d with None -> s | Some d -> Seq (s, d)
       };
 
-      args:
-        e:(IDENT)? suf:(-"," IDENT)* {
-            match e with
-            | Some w -> w::suf
-            | _      -> []
-        };
-
       func:
-        %"fun" f:IDENT "(" a:args ")"
+        %"fun" f:IDENT "(" a:!(Util.list0 ident) ")"
         %"begin"
                s:main
         %"end"                           {FunDcl ((String.concat "" ["_"; f]), a, s)};
