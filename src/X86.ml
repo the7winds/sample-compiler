@@ -76,7 +76,11 @@ class x86env =
     val    args_cnt   = ref 1
 
 
-    method is_global x = List.mem x !glb
+    method is_global x =
+        let g = List.mem x !glb in
+        let l = M.mem x !local_vars in
+        let a = M.mem x !args in
+        g && not l && not a
 
     method set_global g = glb := g
 

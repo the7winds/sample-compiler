@@ -1,0 +1,10 @@
+global x;
+
+fun test (x)
+begin
+write(x);
+return 0
+end
+
+x := 3;
+test (5)

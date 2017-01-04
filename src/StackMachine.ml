@@ -57,13 +57,12 @@ module Interpreter =
                     ((g, state, r::stack', input, output), code')
                   | S_LD x ->
                     (*Printf.printf "HERE! %s\n" x;*)
-                    let el =
-                        if (List.mem_assoc x g) then List.assoc x g
-                                                else List.assoc x state in
+                    let el = (try List.assoc x state with
+                              | _ -> List.assoc x g) in
                     ((g, state, el::stack, input, output), code')
                   | S_ST x ->
                     let y::stack' = stack in
-                    if (List.mem_assoc x g) then
+                    if (not (List.mem_assoc x state) && List.mem_assoc x g) then
                         (((x, y)::g, state, stack', input, output), code')
                     else
                         ((g, (x, y)::state, stack', input, output), code')
